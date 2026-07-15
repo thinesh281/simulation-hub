@@ -1,0 +1,1309 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>LAN Network Simulator — Interactive Tutorial</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700;800&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+/* =========================================================
+   LAN NETWORK SIMULATOR — INTERACTIVE TUTORIAL
+   Free-exploration learning tool for:
+   - LAN Transmission Modes (Unicast, Multicast, Broadcast)
+   - LAN Switching Techniques (Store-and-forward, Cut-through, Fragment-free)
+   ========================================================= */
+
+:root {
+  --bg-deep: #0a0e17;
+  --bg-panel: #111826;
+  --bg-elevated: #1a2332;
+  --border-soft: rgba(120, 200, 255, 0.12);
+  --border-strong: rgba(120, 200, 255, 0.3);
+  --text-primary: #e6edf7;
+  --text-secondary: #8b9bb4;
+  --text-dim: #5a6a82;
+
+  --sender: #a855f7;
+  --sender-glow: rgba(168, 85, 247, 0.5);
+  --receiver: #ef4444;
+  --receiver-glow: rgba(239, 68, 68, 0.5);
+  --receiver-active: #fbbf24;
+  --switch: #38bdf8;
+  --switch-glow: rgba(56, 189, 248, 0.5);
+
+  --success: #10b981;
+  --error: #ef4444;
+  --warning: #f59e0b;
+  --info: #3b82f6;
+
+  --font-display: 'JetBrains Mono', monospace;
+  --font-body: 'Space Grotesk', sans-serif;
+}
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+html, body {
+  background: var(--bg-deep);
+  color: var(--text-primary);
+  font-family: var(--font-body);
+  min-height: 100vh;
+  overflow-x: hidden;
+}
+
+body::before {
+  content: "";
+  position: fixed; inset: 0;
+  background-image:
+    linear-gradient(rgba(56, 189, 248, 0.03) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(56, 189, 248, 0.03) 1px, transparent 1px);
+  background-size: 40px 40px;
+  pointer-events: none;
+  z-index: 0;
+}
+
+.app {
+  position: relative;
+  z-index: 1;
+  max-width: 1400px;
+  margin: 0 auto;
+  padding: 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  min-height: 100vh;
+}
+
+/* ============ HEADER ============ */
+.header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 18px 24px;
+  background: linear-gradient(135deg, var(--bg-panel), var(--bg-elevated));
+  border: 1px solid var(--border-soft);
+  border-radius: 12px;
+  position: relative;
+  overflow: hidden;
+}
+.header::before {
+  content: "";
+  position: absolute; top: 0; left: 0; right: 0; height: 2px;
+  background: linear-gradient(90deg, var(--sender), var(--switch), var(--receiver));
+}
+.brand { display: flex; align-items: center; gap: 14px; }
+.brand-icon {
+  width: 38px; height: 38px;
+  border-radius: 8px;
+  background: linear-gradient(135deg, var(--sender), var(--switch));
+  display: grid; place-items: center;
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: 18px;
+  color: white;
+  box-shadow: 0 0 20px var(--switch-glow);
+}
+.brand-title {
+  font-family: var(--font-display);
+  font-size: 18px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+.brand-sub {
+  font-size: 11px;
+  color: var(--text-dim);
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+}
+.header-actions { display: flex; gap: 10px; align-items: center; }
+.lesson-pill {
+  font-family: var(--font-display);
+  font-size: 11px;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  padding: 8px 14px;
+  background: var(--bg-deep);
+  border: 1px solid var(--border-soft);
+  border-radius: 6px;
+  color: var(--text-secondary);
+}
+.lesson-pill strong { color: var(--switch); font-weight: 700; }
+.icon-btn {
+  background: var(--bg-deep);
+  border: 1px solid var(--border-soft);
+  color: var(--text-secondary);
+  padding: 8px 14px;
+  border-radius: 6px;
+  font-family: var(--font-display);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: all 0.18s ease;
+}
+.icon-btn:hover { color: var(--text-primary); border-color: var(--border-strong); }
+
+/* ============ LESSON BAR ============ */
+.lesson-bar {
+  background: linear-gradient(135deg, rgba(56, 189, 248, 0.08), rgba(168, 85, 247, 0.06));
+  border: 1px solid var(--border-strong);
+  border-radius: 12px;
+  padding: 18px 24px;
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  gap: 20px;
+  align-items: center;
+}
+.lesson-tag {
+  font-family: var(--font-display);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.2em;
+  color: var(--switch);
+  padding: 6px 12px;
+  border: 1px solid var(--switch);
+  border-radius: 4px;
+  text-transform: uppercase;
+  background: rgba(56, 189, 248, 0.05);
+}
+.lesson-content h2 {
+  font-family: var(--font-display);
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin-bottom: 4px;
+  letter-spacing: 0.02em;
+}
+.lesson-content p {
+  font-size: 14px;
+  color: var(--text-secondary);
+  line-height: 1.5;
+}
+.lesson-content p strong { color: var(--text-primary); font-weight: 600; }
+.lesson-nav { display: flex; gap: 6px; }
+.lesson-nav button {
+  width: 36px; height: 36px;
+  border-radius: 8px;
+  background: var(--bg-deep);
+  border: 1px solid var(--border-soft);
+  color: var(--text-secondary);
+  font-family: var(--font-display);
+  font-size: 16px;
+  cursor: pointer;
+  transition: all 0.18s ease;
+}
+.lesson-nav button:hover:not(:disabled) { color: var(--text-primary); border-color: var(--switch); }
+.lesson-nav button:disabled { opacity: 0.3; cursor: not-allowed; }
+
+/* ============ MAIN GRID ============ */
+.main {
+  display: grid;
+  grid-template-columns: 1fr 360px;
+  gap: 16px;
+}
+@media (max-width: 980px) { .main { grid-template-columns: 1fr; } }
+
+/* ============ NETWORK ============ */
+.network {
+  background: var(--bg-panel);
+  border: 1px solid var(--border-soft);
+  border-radius: 12px;
+  padding: 24px;
+  position: relative;
+  overflow: hidden;
+}
+.network-label {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 16px;
+}
+.network-label-text {
+  font-family: var(--font-display);
+  font-size: 10px;
+  letter-spacing: 0.2em;
+  color: var(--text-dim);
+  text-transform: uppercase;
+}
+.status-indicator {
+  font-family: var(--font-display);
+  font-size: 10px;
+  letter-spacing: 0.15em;
+  color: var(--success);
+  text-transform: uppercase;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.status-dot {
+  width: 6px; height: 6px;
+  border-radius: 50%;
+  background: var(--success);
+  box-shadow: 0 0 6px var(--success);
+}
+.status-indicator.busy { color: var(--warning); }
+.status-indicator.busy .status-dot { background: var(--warning); box-shadow: 0 0 6px var(--warning); }
+
+.canvas-wrap { position: relative; width: 100%; height: 400px; }
+#networkSvg { width: 100%; height: 100%; display: block; }
+
+.node-label {
+  font-family: var(--font-display);
+  font-size: 11px;
+  font-weight: 700;
+  fill: var(--text-primary);
+  text-anchor: middle;
+  letter-spacing: 0.05em;
+  pointer-events: none;
+}
+.node-sub {
+  font-family: var(--font-display);
+  font-size: 9px;
+  fill: var(--text-dim);
+  text-anchor: middle;
+  letter-spacing: 0.1em;
+  pointer-events: none;
+}
+
+.sender-node circle {
+  fill: var(--bg-elevated);
+  stroke: var(--sender);
+  stroke-width: 2.5;
+  filter: drop-shadow(0 0 12px var(--sender-glow));
+}
+.switch-node rect {
+  fill: var(--bg-elevated);
+  stroke: var(--switch);
+  stroke-width: 2.5;
+  filter: drop-shadow(0 0 12px var(--switch-glow));
+}
+
+.receiver-node { cursor: pointer; }
+.receiver-node circle {
+  fill: var(--bg-elevated);
+  stroke: var(--receiver);
+  stroke-width: 2.5;
+  transition: all 0.25s ease;
+}
+.receiver-node:hover circle {
+  stroke-width: 3.5;
+  filter: drop-shadow(0 0 10px var(--receiver-glow));
+}
+.receiver-node.selected circle {
+  stroke: var(--receiver-active);
+  fill: rgba(251, 191, 36, 0.12);
+  filter: drop-shadow(0 0 14px rgba(251, 191, 36, 0.6));
+}
+.receiver-node.received circle {
+  fill: rgba(16, 185, 129, 0.25);
+  stroke: var(--success);
+  filter: drop-shadow(0 0 14px rgba(16, 185, 129, 0.6));
+}
+.receiver-node.unwanted circle {
+  fill: rgba(239, 68, 68, 0.25);
+  stroke: var(--error);
+  filter: drop-shadow(0 0 14px rgba(239, 68, 68, 0.6));
+}
+
+.path-line {
+  stroke: var(--border-strong);
+  stroke-width: 1.5;
+  stroke-dasharray: 4 4;
+  fill: none;
+  opacity: 0.4;
+  pointer-events: none;
+}
+.path-line.active {
+  stroke: var(--switch);
+  stroke-dasharray: none;
+  opacity: 1;
+  stroke-width: 2;
+  filter: drop-shadow(0 0 6px var(--switch-glow));
+}
+
+.packet { filter: drop-shadow(0 0 8px var(--switch-glow)); }
+.packet.unicast { fill: #22d3ee; filter: drop-shadow(0 0 8px rgba(34, 211, 238, 0.7)); }
+.packet.multicast { fill: #fbbf24; filter: drop-shadow(0 0 8px rgba(251, 191, 36, 0.7)); }
+.packet.broadcast { fill: #f97316; filter: drop-shadow(0 0 8px rgba(249, 115, 22, 0.7)); }
+
+.sender-pulse { fill: none; stroke: var(--sender); stroke-width: 2; opacity: 0; }
+.sender-pulse.active { animation: senderPulse 1.2s ease-out infinite; }
+@keyframes senderPulse {
+  0% { r: 30; opacity: 0.8; }
+  100% { r: 60; opacity: 0; }
+}
+
+.switch-processing { fill: var(--switch); opacity: 0; }
+.switch-processing.active { animation: switchBlink 0.4s ease-in-out infinite; }
+@keyframes switchBlink {
+  0%, 100% { opacity: 0; }
+  50% { opacity: 0.7; }
+}
+
+.click-hint {
+  font-family: var(--font-display);
+  font-size: 9px;
+  fill: var(--text-dim);
+  text-anchor: middle;
+  letter-spacing: 0.1em;
+}
+
+/* ============ CONTROLS ============ */
+.controls {
+  background: var(--bg-panel);
+  border: 1px solid var(--border-soft);
+  border-radius: 12px;
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.control-section-label {
+  font-family: var(--font-display);
+  font-size: 10px;
+  letter-spacing: 0.2em;
+  color: var(--text-dim);
+  text-transform: uppercase;
+  margin-bottom: 8px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+.info-tip {
+  cursor: help;
+  color: var(--switch);
+  font-size: 11px;
+  width: 16px; height: 16px;
+  border: 1px solid var(--switch);
+  border-radius: 50%;
+  display: inline-grid;
+  place-items: center;
+  font-family: var(--font-display);
+  font-weight: 700;
+  text-transform: none;
+  letter-spacing: 0;
+}
+.option-group { display: flex; flex-direction: column; gap: 6px; }
+.option {
+  background: var(--bg-deep);
+  border: 1.5px solid var(--border-soft);
+  color: var(--text-secondary);
+  padding: 10px 14px;
+  border-radius: 8px;
+  font-family: var(--font-body);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.18s ease;
+  text-align: left;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+.option:hover:not(:disabled) {
+  border-color: var(--border-strong);
+  color: var(--text-primary);
+  transform: translateX(2px);
+}
+.option.selected {
+  background: linear-gradient(135deg, rgba(56, 189, 248, 0.15), rgba(168, 85, 247, 0.1));
+  border-color: var(--switch);
+  color: var(--text-primary);
+  box-shadow: 0 0 16px rgba(56, 189, 248, 0.2);
+}
+.option-hint {
+  font-family: var(--font-display);
+  font-size: 10px;
+  color: var(--text-dim);
+}
+.option.selected .option-hint { color: var(--switch); }
+.speed-bar { display: inline-flex; gap: 2px; margin-left: 8px; }
+.speed-bar span {
+  width: 4px; height: 10px;
+  background: var(--text-dim);
+  border-radius: 1px;
+  opacity: 0.3;
+}
+.speed-bar span.on { opacity: 1; background: var(--switch); }
+.actions { display: flex; gap: 8px; margin-top: 4px; }
+.btn {
+  flex: 1;
+  padding: 12px;
+  border-radius: 8px;
+  font-family: var(--font-display);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  cursor: pointer;
+  border: none;
+  transition: all 0.18s ease;
+}
+.btn-primary {
+  background: linear-gradient(135deg, var(--sender), var(--switch));
+  color: white;
+  box-shadow: 0 4px 16px rgba(56, 189, 248, 0.3);
+}
+.btn-primary:hover:not(:disabled) {
+  transform: translateY(-1px);
+  box-shadow: 0 6px 20px rgba(56, 189, 248, 0.4);
+}
+.btn-primary:disabled { opacity: 0.4; cursor: not-allowed; }
+.btn-secondary {
+  background: var(--bg-deep);
+  color: var(--text-secondary);
+  border: 1px solid var(--border-soft);
+}
+.btn-secondary:hover { color: var(--text-primary); border-color: var(--border-strong); }
+
+.selected-display {
+  background: var(--bg-deep);
+  border: 1px dashed var(--border-soft);
+  border-radius: 8px;
+  padding: 10px 12px;
+  font-family: var(--font-display);
+  font-size: 11px;
+  color: var(--text-secondary);
+  letter-spacing: 0.05em;
+}
+.selected-display strong { color: var(--receiver-active); }
+.selected-display .empty { color: var(--text-dim); font-style: italic; }
+
+/* ============ OBSERVATION ============ */
+.observation {
+  background: var(--bg-panel);
+  border: 1px solid var(--border-soft);
+  border-radius: 12px;
+  padding: 18px 22px;
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  min-height: 80px;
+}
+.obs-icon {
+  width: 36px; height: 36px;
+  border-radius: 50%;
+  display: grid; place-items: center;
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: 16px;
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+.obs-icon.idle { background: var(--bg-elevated); color: var(--text-dim); border: 1.5px solid var(--border-soft); }
+.obs-icon.success { background: rgba(16, 185, 129, 0.15); color: var(--success); border: 1.5px solid var(--success); }
+.obs-icon.warn { background: rgba(245, 158, 11, 0.15); color: var(--warning); border: 1.5px solid var(--warning); }
+.obs-icon.info { background: rgba(56, 189, 248, 0.15); color: var(--switch); border: 1.5px solid var(--switch); }
+.obs-content { flex: 1; }
+.obs-title {
+  font-family: var(--font-display);
+  font-size: 11px;
+  letter-spacing: 0.15em;
+  color: var(--text-dim);
+  text-transform: uppercase;
+  margin-bottom: 6px;
+}
+.obs-text {
+  font-size: 14px;
+  color: var(--text-primary);
+  line-height: 1.55;
+}
+.obs-text strong { color: var(--receiver-active); }
+.obs-text .key { color: var(--switch); font-family: var(--font-display); font-size: 12px; }
+.obs-text .takeaway {
+  display: block;
+  margin-top: 8px;
+  padding: 8px 12px;
+  background: rgba(56, 189, 248, 0.08);
+  border-left: 2px solid var(--switch);
+  border-radius: 4px;
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+.obs-text .takeaway strong { color: var(--text-primary); }
+
+.legend {
+  display: flex;
+  gap: 18px;
+  margin-top: 12px;
+  flex-wrap: wrap;
+}
+.legend-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-family: var(--font-display);
+  font-size: 10px;
+  color: var(--text-dim);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+.legend-dot {
+  width: 10px; height: 10px;
+  border-radius: 50%;
+  border: 2px solid;
+}
+.legend-dot.sender { border-color: var(--sender); background: rgba(168, 85, 247, 0.2); }
+.legend-dot.switch { border-color: var(--switch); background: rgba(56, 189, 248, 0.2); border-radius: 2px; }
+.legend-dot.receiver { border-color: var(--receiver); background: rgba(239, 68, 68, 0.2); }
+.legend-dot.targeted { border-color: var(--receiver-active); background: rgba(251, 191, 36, 0.2); }
+
+.tooltip {
+  position: fixed;
+  background: var(--bg-deep);
+  border: 1px solid var(--switch);
+  border-radius: 8px;
+  padding: 12px 14px;
+  max-width: 280px;
+  font-size: 12px;
+  color: var(--text-primary);
+  line-height: 1.5;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+  z-index: 200;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.15s ease;
+}
+.tooltip.show { opacity: 1; }
+.tooltip strong {
+  color: var(--switch);
+  font-family: var(--font-display);
+  display: block;
+  margin-bottom: 4px;
+  font-size: 11px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+/* ============ MODAL ============ */
+.modal-backdrop {
+  position: fixed; inset: 0;
+  background: rgba(10, 14, 23, 0.85);
+  backdrop-filter: blur(8px);
+  display: none;
+  place-items: center;
+  z-index: 100;
+  padding: 20px;
+}
+.modal-backdrop.show { display: grid; animation: fadeIn 0.3s ease; }
+@keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+.modal {
+  background: linear-gradient(135deg, var(--bg-panel), var(--bg-elevated));
+  border: 1px solid var(--border-strong);
+  border-radius: 16px;
+  padding: 32px;
+  max-width: 560px;
+  width: 100%;
+  position: relative;
+  overflow: hidden;
+  max-height: 90vh;
+  overflow-y: auto;
+}
+.modal::before {
+  content: "";
+  position: absolute; top: 0; left: 0; right: 0; height: 3px;
+  background: linear-gradient(90deg, var(--sender), var(--switch), var(--success));
+}
+.modal-title {
+  font-family: var(--font-display);
+  font-size: 20px;
+  font-weight: 800;
+  letter-spacing: 0.05em;
+  margin-bottom: 8px;
+  background: linear-gradient(135deg, var(--switch), var(--sender));
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+.modal-sub { color: var(--text-secondary); margin-bottom: 20px; font-size: 14px; line-height: 1.5; }
+.guide-step {
+  display: flex;
+  gap: 14px;
+  padding: 14px 0;
+  border-top: 1px solid var(--border-soft);
+}
+.guide-step:first-of-type { border-top: none; }
+.guide-num {
+  width: 28px; height: 28px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, var(--sender), var(--switch));
+  color: white;
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: 13px;
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+}
+.guide-step h4 {
+  font-family: var(--font-display);
+  font-size: 13px;
+  font-weight: 700;
+  margin-bottom: 4px;
+  color: var(--text-primary);
+  letter-spacing: 0.03em;
+}
+.guide-step p { font-size: 13px; color: var(--text-secondary); line-height: 1.5; }
+.modal-close { margin-top: 16px; width: 100%; }
+
+@media (max-width: 700px) {
+  .app { padding: 12px; gap: 12px; }
+  .header { flex-direction: column; gap: 12px; align-items: stretch; }
+  .header-actions { justify-content: space-between; }
+  .lesson-bar { grid-template-columns: 1fr; gap: 12px; }
+  .lesson-nav { justify-content: flex-end; }
+  .canvas-wrap { height: 340px; }
+  .brand-title { font-size: 16px; }
+}
+</style>
+</head>
+<body>
+
+<div class="app">
+
+  <!-- HEADER -->
+  <header class="header">
+    <div class="brand">
+      <div class="brand-icon">⌬</div>
+      <div>
+        <div class="brand-title">LAN NETWORK SIMULATOR</div>
+        <div class="brand-sub">Interactive Tutorial · Free Exploration</div>
+      </div>
+    </div>
+    <div class="header-actions">
+      <div class="lesson-pill">Lesson <strong id="lessonNum">1</strong> of <strong id="lessonTotal">5</strong></div>
+      <button class="icon-btn" id="howBtn">How to Use</button>
+    </div>
+  </header>
+
+  <!-- LESSON BAR -->
+  <div class="lesson-bar">
+    <div class="lesson-tag" id="lessonTag">Lesson 1</div>
+    <div class="lesson-content">
+      <h2 id="lessonTitle">Welcome — Try Sending Data</h2>
+      <p id="lessonBody">Click any receiver to mark it as a target, pick a transmission mode, then press Send Data to see what happens.</p>
+    </div>
+    <div class="lesson-nav">
+      <button id="lessonPrev" title="Previous lesson">←</button>
+      <button id="lessonNext" title="Next lesson">→</button>
+    </div>
+  </div>
+
+  <!-- MAIN -->
+  <div class="main">
+
+    <section class="network">
+      <div class="network-label">
+        <span class="network-label-text">// Network Topology — click receivers to target them</span>
+        <span class="status-indicator" id="statusIndicator">
+          <span class="status-dot"></span><span id="statusText">Ready</span>
+        </span>
+      </div>
+      <div class="canvas-wrap">
+        <svg id="networkSvg" viewBox="0 0 800 400" preserveAspectRatio="xMidYMid meet">
+          <g id="paths">
+            <path class="path-line" id="pathA" d="M 200 200 L 400 200 L 650 80"/>
+            <path class="path-line" id="pathB" d="M 200 200 L 400 200 L 650 160"/>
+            <path class="path-line" id="pathC" d="M 200 200 L 400 200 L 650 240"/>
+            <path class="path-line" id="pathD" d="M 200 200 L 400 200 L 650 320"/>
+          </g>
+
+          <circle class="sender-pulse" id="senderPulse" cx="200" cy="200" r="30"/>
+
+          <g class="sender-node">
+            <circle cx="200" cy="200" r="32"/>
+            <text class="node-label" x="200" y="196">SENDER</text>
+            <text class="node-sub" x="200" y="210">SRC</text>
+          </g>
+
+          <g class="switch-node">
+            <rect x="360" y="170" width="80" height="60" rx="6"/>
+            <rect class="switch-processing" id="switchProc" x="370" y="180" width="60" height="40" rx="3"/>
+            <text class="node-label" x="400" y="198">SWITCH</text>
+            <text class="node-sub" x="400" y="214">FORWARDER</text>
+          </g>
+
+          <g class="receiver-node" id="receiverA" data-id="A">
+            <circle cx="680" cy="80" r="26"/>
+            <text class="node-label" x="680" y="78">RX-A</text>
+            <text class="node-sub" x="680" y="90">HOST</text>
+          </g>
+          <g class="receiver-node" id="receiverB" data-id="B">
+            <circle cx="680" cy="160" r="26"/>
+            <text class="node-label" x="680" y="158">RX-B</text>
+            <text class="node-sub" x="680" y="170">HOST</text>
+          </g>
+          <g class="receiver-node" id="receiverC" data-id="C">
+            <circle cx="680" cy="240" r="26"/>
+            <text class="node-label" x="680" y="238">RX-C</text>
+            <text class="node-sub" x="680" y="250">HOST</text>
+          </g>
+          <g class="receiver-node" id="receiverD" data-id="D">
+            <circle cx="680" cy="320" r="26"/>
+            <text class="node-label" x="680" y="318">RX-D</text>
+            <text class="node-sub" x="680" y="330">HOST</text>
+          </g>
+
+          <text class="click-hint" x="680" y="380">▲ click to target ▲</text>
+
+          <g id="packets"></g>
+        </svg>
+      </div>
+
+      <div class="legend">
+        <div class="legend-item"><span class="legend-dot sender"></span>Sender</div>
+        <div class="legend-item"><span class="legend-dot switch"></span>Switch</div>
+        <div class="legend-item"><span class="legend-dot receiver"></span>Receiver</div>
+        <div class="legend-item"><span class="legend-dot targeted"></span>Your Target</div>
+      </div>
+    </section>
+
+    <aside class="controls">
+      <div>
+        <div class="control-section-label"><span>▸ Your Targets</span></div>
+        <div class="selected-display" id="selectedDisplay">
+          <span class="empty">No receivers selected — click them on the diagram</span>
+        </div>
+      </div>
+
+      <div>
+        <div class="control-section-label">
+          <span>▸ Transmission Mode</span>
+          <span class="info-tip" data-tip="mode">i</span>
+        </div>
+        <div class="option-group" id="modeGroup">
+          <button class="option" data-mode="unicast" data-tip="unicast">
+            <span>Unicast</span>
+            <span class="option-hint">1 → 1</span>
+          </button>
+          <button class="option" data-mode="multicast" data-tip="multicast">
+            <span>Multicast</span>
+            <span class="option-hint">1 → group</span>
+          </button>
+          <button class="option" data-mode="broadcast" data-tip="broadcast">
+            <span>Broadcast</span>
+            <span class="option-hint">1 → all</span>
+          </button>
+        </div>
+      </div>
+
+      <div>
+        <div class="control-section-label">
+          <span>▸ Switching Technique</span>
+          <span class="info-tip" data-tip="switching">i</span>
+        </div>
+        <div class="option-group" id="switchGroup">
+          <button class="option" data-switch="store" data-tip="store">
+            <span>Store-and-Forward</span>
+            <span class="speed-bar"><span class="on"></span><span></span><span></span></span>
+          </button>
+          <button class="option" data-switch="cut" data-tip="cut">
+            <span>Cut-Through</span>
+            <span class="speed-bar"><span class="on"></span><span class="on"></span><span class="on"></span></span>
+          </button>
+          <button class="option" data-switch="fragment" data-tip="fragment">
+            <span>Fragment-Free</span>
+            <span class="speed-bar"><span class="on"></span><span class="on"></span><span></span></span>
+          </button>
+        </div>
+      </div>
+
+      <div class="actions">
+        <button class="btn btn-secondary" id="resetBtn">Reset</button>
+        <button class="btn btn-primary" id="sendBtn">Send Data ▶</button>
+      </div>
+    </aside>
+
+  </div>
+
+  <!-- OBSERVATION PANEL -->
+  <div class="observation">
+    <div class="obs-icon idle" id="obsIcon">i</div>
+    <div class="obs-content">
+      <div class="obs-title" id="obsTitle">Observation</div>
+      <div class="obs-text" id="obsText">
+        Pick targets, choose your settings, and press Send Data. Watch what happens — there's no wrong answer here, this is your sandbox to experiment.
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<div class="tooltip" id="tooltip"></div>
+
+<!-- HOW TO USE MODAL -->
+<div class="modal-backdrop" id="howModal">
+  <div class="modal">
+    <div class="modal-title">HOW TO USE THIS SIMULATOR</div>
+    <div class="modal-sub">A hands-on sandbox for understanding LAN transmission and switching. There are no scores or wrong answers — every experiment teaches you something.</div>
+
+    <div class="guide-step">
+      <div class="guide-num">1</div>
+      <div>
+        <h4>Pick Your Targets</h4>
+        <p>Click any receiver (RX-A, RX-B, RX-C, RX-D) on the diagram to mark it as a target. Click again to deselect. Targeted receivers glow yellow.</p>
+      </div>
+    </div>
+    <div class="guide-step">
+      <div class="guide-num">2</div>
+      <div>
+        <h4>Choose a Transmission Mode</h4>
+        <p>Pick Unicast, Multicast, or Broadcast. Each one decides <em>who</em> the data is sent to — regardless of your target selection. This is how you discover the difference.</p>
+      </div>
+    </div>
+    <div class="guide-step">
+      <div class="guide-num">3</div>
+      <div>
+        <h4>Choose a Switching Technique</h4>
+        <p>Pick how the switch processes the frame. This affects <em>how fast</em> and <em>how reliably</em> data passes through. Watch the switch indicator during transmission.</p>
+      </div>
+    </div>
+    <div class="guide-step">
+      <div class="guide-num">4</div>
+      <div>
+        <h4>Send and Observe</h4>
+        <p>Press Send Data. Packets animate from sender → switch → receivers. The observation panel below explains what you just saw and why it happened.</p>
+      </div>
+    </div>
+    <div class="guide-step">
+      <div class="guide-num">5</div>
+      <div>
+        <h4>Follow the Lessons (or Skip Them)</h4>
+        <p>The lesson bar at the top suggests experiments. Use ← → to navigate lessons, or ignore them and explore freely.</p>
+      </div>
+    </div>
+
+    <button class="btn btn-primary modal-close" id="closeHow">Got it — let me explore</button>
+  </div>
+</div>
+
+<script>
+/* =========================================================
+   INTERACTIVE TUTORIAL — LAN NETWORK SIMULATOR
+   Free-exploration learning. No scores. Every action teaches.
+   ========================================================= */
+
+const RECEIVERS = ['A', 'B', 'C', 'D'];
+
+/* Educational reference data ------------------------------- */
+const MODE_INFO = {
+  unicast: {
+    name: 'Unicast',
+    behavior: 'sends data to exactly ONE receiver',
+    detail: 'A unicast frame carries the MAC address of a single host. The switch forwards it only out the port leading to that host.'
+  },
+  multicast: {
+    name: 'Multicast',
+    behavior: 'sends data to a SELECTED GROUP of receivers',
+    detail: 'A multicast frame uses a special destination address that represents a group. Only hosts that have joined the group accept the frame.'
+  },
+  broadcast: {
+    name: 'Broadcast',
+    behavior: 'sends data to ALL receivers on the LAN',
+    detail: 'A broadcast frame uses the address FF:FF:FF:FF:FF:FF. The switch floods it out every port except the one it arrived on.'
+  }
+};
+
+const SWITCH_INFO = {
+  store: {
+    name: 'Store-and-Forward',
+    delayMs: 1400,
+    detail: 'The switch receives the ENTIRE frame, runs a checksum (CRC) error check, and only then forwards it. Slowest, but corrupted frames are dropped before they waste bandwidth.',
+    speed: 'Slowest', reliability: 'Highest'
+  },
+  cut: {
+    name: 'Cut-Through',
+    delayMs: 250,
+    detail: 'The switch reads only the destination MAC address (first 6 bytes after the preamble) and forwards immediately. Fastest, but corrupted frames pass through and waste downstream bandwidth.',
+    speed: 'Fastest', reliability: 'Lowest'
+  },
+  fragment: {
+    name: 'Fragment-Free',
+    delayMs: 700,
+    detail: 'The switch reads the first 64 bytes (where most collisions and runt frames are detected) before forwarding. A balanced compromise between speed and reliability.',
+    speed: 'Medium', reliability: 'Medium'
+  }
+};
+
+/* Guided lesson sequence — each lesson suggests an experiment */
+const LESSONS = [
+  {
+    tag: 'Lesson 1 · Start Here',
+    title: 'Welcome — Try Sending Data',
+    body: 'Click <strong>RX-A</strong> on the diagram to target it, choose <strong>Unicast</strong>, pick any switching technique, then press <strong>Send Data</strong>. Watch what happens.'
+  },
+  {
+    tag: 'Lesson 2 · Unicast',
+    title: 'One-to-One Delivery',
+    body: 'Try Unicast with multiple targets selected (e.g. RX-A and RX-B). Notice how only ONE receiver actually gets the data — unicast can\'t deliver to a group.'
+  },
+  {
+    tag: 'Lesson 3 · Multicast',
+    title: 'One-to-Group Delivery',
+    body: 'Select 2 or 3 targets (e.g. RX-A and RX-C), pick <strong>Multicast</strong>, and send. The group receives the data — but uninvolved hosts don\'t. Compare with broadcast next.'
+  },
+  {
+    tag: 'Lesson 4 · Broadcast',
+    title: 'One-to-All Delivery',
+    body: 'Select only RX-A as a target, but pick <strong>Broadcast</strong>. Watch what happens to RX-B, C, and D — they receive the data even though you didn\'t target them. This is why broadcast is wasteful when only some hosts need the data.'
+  },
+  {
+    tag: 'Lesson 5 · Switching Speeds',
+    title: 'Compare Switching Techniques',
+    body: 'Send the same data three times — once with <strong>Cut-Through</strong>, once with <strong>Fragment-Free</strong>, once with <strong>Store-and-Forward</strong>. Watch the switch indicator. Notice the speed/reliability trade-off.'
+  }
+];
+
+const state = {
+  lesson: 0,
+  selectedTargets: new Set(),
+  selectedMode: null,
+  selectedSwitch: null,
+  isAnimating: false,
+};
+
+const $ = (id) => document.getElementById(id);
+const els = {
+  lessonNum: $('lessonNum'), lessonTotal: $('lessonTotal'),
+  lessonTag: $('lessonTag'), lessonTitle: $('lessonTitle'), lessonBody: $('lessonBody'),
+  lessonPrev: $('lessonPrev'), lessonNext: $('lessonNext'),
+  selectedDisplay: $('selectedDisplay'),
+  modeGroup: $('modeGroup'), switchGroup: $('switchGroup'),
+  sendBtn: $('sendBtn'), resetBtn: $('resetBtn'),
+  obsIcon: $('obsIcon'), obsTitle: $('obsTitle'), obsText: $('obsText'),
+  senderPulse: $('senderPulse'), switchProc: $('switchProc'), packets: $('packets'),
+  statusIndicator: $('statusIndicator'), statusText: $('statusText'),
+  howBtn: $('howBtn'), howModal: $('howModal'), closeHow: $('closeHow'),
+  tooltip: $('tooltip'),
+};
+
+/* Lesson navigation --------------------------------------- */
+function renderLesson() {
+  const l = LESSONS[state.lesson];
+  els.lessonTag.textContent = l.tag;
+  els.lessonTitle.textContent = l.title;
+  els.lessonBody.innerHTML = l.body;
+  els.lessonNum.textContent = state.lesson + 1;
+  els.lessonTotal.textContent = LESSONS.length;
+  els.lessonPrev.disabled = state.lesson === 0;
+  els.lessonNext.disabled = state.lesson === LESSONS.length - 1;
+}
+els.lessonPrev.addEventListener('click', () => {
+  if (state.lesson > 0) { state.lesson--; renderLesson(); }
+});
+els.lessonNext.addEventListener('click', () => {
+  if (state.lesson < LESSONS.length - 1) { state.lesson++; renderLesson(); }
+});
+
+/* Receiver targeting -------------------------------------- */
+function updateTargetDisplay() {
+  if (state.selectedTargets.size === 0) {
+    els.selectedDisplay.innerHTML = '<span class="empty">No receivers selected — click them on the diagram</span>';
+  } else {
+    const list = Array.from(state.selectedTargets).sort().map(id => `<strong>RX-${id}</strong>`).join(', ');
+    els.selectedDisplay.innerHTML = `Targeting: ${list} <span style="color:var(--text-dim)">(${state.selectedTargets.size} of 4)</span>`;
+  }
+}
+function clearReceiverStates() {
+  RECEIVERS.forEach(id => {
+    const node = $('receiver' + id);
+    node.classList.remove('received', 'unwanted');
+  });
+  document.querySelectorAll('.path-line').forEach(p => p.classList.remove('active'));
+  els.packets.innerHTML = '';
+}
+RECEIVERS.forEach(id => {
+  const node = $('receiver' + id);
+  node.addEventListener('click', () => {
+    if (state.isAnimating) return;
+    if (state.selectedTargets.has(id)) {
+      state.selectedTargets.delete(id);
+      node.classList.remove('selected');
+    } else {
+      state.selectedTargets.add(id);
+      node.classList.add('selected');
+    }
+    clearReceiverStates();
+    updateTargetDisplay();
+  });
+});
+
+/* Mode/switch option selection ---------------------------- */
+document.querySelectorAll('#modeGroup .option').forEach(btn => {
+  btn.addEventListener('click', () => {
+    if (state.isAnimating) return;
+    document.querySelectorAll('#modeGroup .option').forEach(b => b.classList.remove('selected'));
+    btn.classList.add('selected');
+    state.selectedMode = btn.dataset.mode;
+  });
+});
+document.querySelectorAll('#switchGroup .option').forEach(btn => {
+  btn.addEventListener('click', () => {
+    if (state.isAnimating) return;
+    document.querySelectorAll('#switchGroup .option').forEach(b => b.classList.remove('selected'));
+    btn.classList.add('selected');
+    state.selectedSwitch = btn.dataset.switch;
+  });
+});
+
+/* Tooltips ------------------------------------------------- */
+const TOOLTIPS = {
+  mode: { title: 'Transmission Mode', body: 'Decides WHO receives the data: one host, a group, or everyone.' },
+  switching: { title: 'Switching Technique', body: 'Decides HOW the switch processes a frame before forwarding it. Affects speed and reliability.' },
+  unicast: { title: 'Unicast', body: 'One sender, one receiver. Most LAN traffic is unicast.' },
+  multicast: { title: 'Multicast', body: 'One sender, a group of receivers. Used for streaming, video conferencing, routing protocol updates.' },
+  broadcast: { title: 'Broadcast', body: 'One sender, ALL receivers on the LAN. Used for ARP requests, DHCP discovery.' },
+  store: { title: 'Store-and-Forward', body: 'Receives the full frame, checks for errors, then forwards. Reliable but slow.' },
+  cut: { title: 'Cut-Through', body: 'Forwards as soon as the destination address is read. Very fast, but no error checking.' },
+  fragment: { title: 'Fragment-Free', body: 'Reads the first 64 bytes (collision window) before forwarding. Balanced compromise.' },
+};
+document.querySelectorAll('[data-tip]').forEach(el => {
+  el.addEventListener('mouseenter', () => {
+    const tip = TOOLTIPS[el.dataset.tip];
+    if (!tip) return;
+    els.tooltip.innerHTML = `<strong>${tip.title}</strong>${tip.body}`;
+    els.tooltip.classList.add('show');
+  });
+  el.addEventListener('mousemove', (e) => {
+    const x = Math.min(e.clientX + 14, window.innerWidth - 300);
+    const y = Math.min(e.clientY + 14, window.innerHeight - 100);
+    els.tooltip.style.left = x + 'px';
+    els.tooltip.style.top = y + 'px';
+  });
+  el.addEventListener('mouseleave', () => els.tooltip.classList.remove('show'));
+});
+
+function setStatus(text, busy = false) {
+  els.statusText.textContent = text;
+  els.statusIndicator.classList.toggle('busy', busy);
+}
+
+function setObservation(type, title, html) {
+  els.obsIcon.className = 'obs-icon ' + type;
+  els.obsIcon.textContent = type === 'success' ? '✓' : type === 'warn' ? '!' : 'i';
+  els.obsTitle.textContent = title;
+  els.obsText.innerHTML = html;
+}
+
+/* Packet animation ---------------------------------------- */
+function animatePacket(receiverId, mode, switchType, onComplete) {
+  const switchDelay = SWITCH_INFO[switchType].delayMs;
+  const packet = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+  packet.setAttribute('class', 'packet ' + mode);
+  packet.setAttribute('x', '-5');
+  packet.setAttribute('y', '-5');
+  packet.setAttribute('width', '10');
+  packet.setAttribute('height', '10');
+  packet.setAttribute('rx', '2');
+  els.packets.appendChild(packet);
+
+  const receiverPos = {
+    A: { x: 680, y: 80 }, B: { x: 680, y: 160 },
+    C: { x: 680, y: 240 }, D: { x: 680, y: 320 },
+  };
+  const target = receiverPos[receiverId];
+  $('path' + receiverId).classList.add('active');
+
+  const phase1 = 600, phase2 = switchDelay, phase3 = 600;
+  const start = performance.now();
+
+  function frame(now) {
+    const elapsed = now - start;
+    let x, y;
+    if (elapsed < phase1) {
+      const t = elapsed / phase1;
+      x = 200 + (400 - 200) * t; y = 200;
+    } else if (elapsed < phase1 + phase2) {
+      x = 400; y = 200;
+      els.switchProc.classList.add('active');
+    } else if (elapsed < phase1 + phase2 + phase3) {
+      els.switchProc.classList.remove('active');
+      const t = (elapsed - phase1 - phase2) / phase3;
+      x = 400 + (target.x - 400) * t;
+      y = 200 + (target.y - 200) * t;
+    } else {
+      packet.remove();
+      els.switchProc.classList.remove('active');
+      if (onComplete) onComplete();
+      return;
+    }
+    packet.setAttribute('transform', `translate(${x},${y})`);
+    requestAnimationFrame(frame);
+  }
+  requestAnimationFrame(frame);
+}
+
+/* Send Data — the main interaction ------------------------ */
+els.sendBtn.addEventListener('click', () => {
+  if (state.isAnimating) return;
+
+  // Helpful prompts instead of error states
+  if (!state.selectedMode) {
+    setObservation('warn', 'Pick a transmission mode',
+      'Choose <strong>Unicast</strong>, <strong>Multicast</strong>, or <strong>Broadcast</strong> from the right panel before sending.');
+    return;
+  }
+  if (!state.selectedSwitch) {
+    setObservation('warn', 'Pick a switching technique',
+      'Choose how the switch should process the frame: <strong>Store-and-Forward</strong>, <strong>Cut-Through</strong>, or <strong>Fragment-Free</strong>.');
+    return;
+  }
+
+  state.isAnimating = true;
+  els.sendBtn.disabled = true;
+  setStatus('Transmitting...', true);
+  clearReceiverStates();
+
+  // Determine recipients based on the chosen MODE — students see
+  // through experimentation that the mode (not their selection)
+  // dictates who actually receives.
+  let actualReceivers;
+  const targets = Array.from(state.selectedTargets);
+
+  if (state.selectedMode === 'unicast') {
+    // Unicast can only address ONE host. If multiple were targeted,
+    // only the first gets data — teaching unicast's limitation.
+    actualReceivers = targets.length > 0 ? [targets[0]] : ['A'];
+  } else if (state.selectedMode === 'multicast') {
+    actualReceivers = targets.length > 0 ? targets : ['A'];
+  } else {
+    // Broadcast goes to ALL hosts regardless of selection — teaching
+    // broadcast's "wasteful" property.
+    actualReceivers = [...RECEIVERS];
+  }
+
+  els.senderPulse.classList.add('active');
+
+  let pending = actualReceivers.length;
+  actualReceivers.forEach((rid, idx) => {
+    setTimeout(() => {
+      animatePacket(rid, state.selectedMode, state.selectedSwitch, () => {
+        const node = $('receiver' + rid);
+        const wasSelected = state.selectedTargets.has(rid);
+        if (state.selectedTargets.size === 0 || wasSelected) {
+          node.classList.add('received');
+        } else {
+          node.classList.add('unwanted');
+        }
+        pending--;
+        if (pending === 0) {
+          els.senderPulse.classList.remove('active');
+          state.isAnimating = false;
+          els.sendBtn.disabled = false;
+          setStatus('Transmission complete');
+          generateObservation(actualReceivers);
+        }
+      });
+    }, idx * 120);
+  });
+});
+
+/* Observation generator — the AI tutor that explains what
+   just happened. Detects interesting situations (over-delivery,
+   under-delivery, perfect match) and gives tailored feedback. */
+function generateObservation(actualReceivers) {
+  const targets = Array.from(state.selectedTargets);
+  const mode = MODE_INFO[state.selectedMode];
+  const sw = SWITCH_INFO[state.selectedSwitch];
+
+  const targetList = targets.length > 0 ? targets.sort().map(r => `RX-${r}`).join(', ') : 'none';
+
+  let situation = 'info';
+  let lessonHtml = '';
+
+  if (state.selectedMode === 'broadcast' && targets.length > 0 && targets.length < 4) {
+    situation = 'warn';
+    const unwanted = RECEIVERS.filter(r => !state.selectedTargets.has(r)).map(r => 'RX-'+r).join(', ');
+    lessonHtml = `
+      You targeted <strong>${targetList}</strong>, but Broadcast doesn't care about your target list — it sends to <span class="key">every host</span>.
+      Notice how <strong>${unwanted}</strong> received data they didn't need (shown in red).
+      <span class="takeaway"><strong>Takeaway:</strong> Broadcast wastes bandwidth when only some hosts need the data. Use Multicast for selective delivery.</span>
+    `;
+  } else if (state.selectedMode === 'unicast' && targets.length > 1) {
+    situation = 'warn';
+    const missed = targets.slice(1).map(r => 'RX-' + r).join(', ');
+    lessonHtml = `
+      You selected <strong>${targets.length} targets</strong> (${targetList}), but Unicast can only deliver to <span class="key">one receiver at a time</span>.
+      Only <strong>RX-${targets[0]}</strong> got the data. <strong>${missed}</strong> received nothing.
+      <span class="takeaway"><strong>Takeaway:</strong> If you need multiple receivers to get the same data, switch to Multicast (selected group) or Broadcast (everyone).</span>
+    `;
+  } else if (state.selectedMode === 'multicast' && targets.length === 0) {
+    situation = 'info';
+    lessonHtml = `
+      You picked Multicast but didn't select any targets. By default, the data went to RX-A.
+      <span class="takeaway"><strong>Try this:</strong> Click 2 or 3 receivers on the diagram, then send again. You'll see multicast deliver to exactly that group.</span>
+    `;
+  } else if (state.selectedMode === 'multicast' && targets.length === 4) {
+    situation = 'info';
+    lessonHtml = `
+      You selected all 4 receivers and used Multicast. Functionally, this delivered to everyone — the same outcome as Broadcast.
+      <span class="takeaway"><strong>Takeaway:</strong> When the "group" includes all hosts, multicast and broadcast produce the same delivery — but they use different addressing schemes underneath.</span>
+    `;
+  } else if (state.selectedMode === 'unicast' && targets.length <= 1) {
+    situation = 'success';
+    lessonHtml = `
+      Perfect Unicast usage — one sender, one receiver. ${mode.detail}
+      <span class="takeaway"><strong>Takeaway:</strong> Unicast is the most common LAN traffic. Most file transfers, web requests, and database queries use it.</span>
+    `;
+  } else if (state.selectedMode === 'multicast' && targets.length >= 2 && targets.length <= 3) {
+    situation = 'success';
+    lessonHtml = `
+      Excellent Multicast usage — data delivered to your selected group of ${targets.length}, and nobody else. ${mode.detail}
+      <span class="takeaway"><strong>Takeaway:</strong> Multicast is efficient for video streaming, conferencing, and routing protocols (OSPF, EIGRP) where many — but not all — hosts need the same data.</span>
+    `;
+  } else if (state.selectedMode === 'broadcast' && (targets.length === 0 || targets.length === 4)) {
+    situation = 'success';
+    lessonHtml = `
+      Broadcast sent the frame to all 4 receivers. ${mode.detail}
+      <span class="takeaway"><strong>Takeaway:</strong> Real protocols that rely on broadcast include ARP (finding a MAC address) and DHCP Discover (finding an IP address).</span>
+    `;
+  } else {
+    lessonHtml = `${mode.name} ${mode.behavior}. ${mode.detail}`;
+  }
+
+  // Always append a note about the chosen switching technique
+  lessonHtml += `
+    <span class="takeaway" style="border-left-color: var(--sender);">
+      <strong>${sw.name}</strong> · Speed: ${sw.speed} · Reliability: ${sw.reliability}<br>
+      ${sw.detail}
+    </span>
+  `;
+
+  setObservation(situation, `${mode.name} → ${actualReceivers.length} host${actualReceivers.length === 1 ? '' : 's'}`, lessonHtml);
+}
+
+/* Reset --------------------------------------------------- */
+els.resetBtn.addEventListener('click', () => {
+  if (state.isAnimating) return;
+  state.selectedTargets.clear();
+  state.selectedMode = null;
+  state.selectedSwitch = null;
+  RECEIVERS.forEach(id => {
+    const n = $('receiver' + id);
+    n.classList.remove('selected', 'received', 'unwanted');
+  });
+  document.querySelectorAll('.option').forEach(b => b.classList.remove('selected'));
+  document.querySelectorAll('.path-line').forEach(p => p.classList.remove('active'));
+  els.packets.innerHTML = '';
+  updateTargetDisplay();
+  setStatus('Ready');
+  setObservation('idle', 'Observation', 'Reset complete. Pick targets, choose your settings, and experiment again.');
+});
+
+/* Modal --------------------------------------------------- */
+els.howBtn.addEventListener('click', () => els.howModal.classList.add('show'));
+els.closeHow.addEventListener('click', () => els.howModal.classList.remove('show'));
+els.howModal.addEventListener('click', (e) => {
+  if (e.target === els.howModal) els.howModal.classList.remove('show');
+});
+
+/* Boot ---------------------------------------------------- */
+renderLesson();
+updateTargetDisplay();
+els.howModal.classList.add('show');
+</script>
+
+</body>
+</html>

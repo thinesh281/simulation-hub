@@ -1,0 +1,350 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>DDoS Demo — Teacher Dashboard</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Sora:wght@400;600;700;800&display=swap');
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  :root {
+    --green: #00ff88; --red: #ff3355; --yellow: #ffd700; --blue: #00aaff;
+    --darker: #060810; --panel: #111827; --border: rgba(255,255,255,0.08);
+    --text: #e8eaf6; --muted: #6b7280;
+    --font-main: 'Sora', sans-serif; --font-mono: 'Space Mono', monospace;
+  }
+  body {
+    background: var(--darker); color: var(--text); font-family: var(--font-main);
+    min-height: 100vh; display: flex; flex-direction: column;
+    padding: 1.5rem; gap: 1.25rem;
+  }
+  @keyframes overload-flash {
+    0%,100% { box-shadow: none; }
+    50% { box-shadow: 0 0 80px rgba(255,51,85,0.4) inset; }
+  }
+  body.overloaded { animation: overload-flash 0.6s infinite; }
+
+  /* connecting overlay */
+  #connecting {
+    position: fixed; inset: 0; background: rgba(6,8,16,0.93);
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    gap: 1rem; z-index: 999; font-family: var(--font-mono);
+  }
+  .spin {
+    width: 42px; height: 42px;
+    border: 3px solid rgba(255,255,255,0.1);
+    border-top-color: var(--blue); border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  #connecting p { color: var(--muted); font-size: 0.82rem; }
+  #conn-err { color: var(--red); font-size: 0.76rem; max-width: 380px; text-align: center; line-height: 1.7; display: none; }
+
+  .header { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 1rem; }
+  .header h1 { font-size: clamp(1.3rem,3vw,1.9rem); font-weight: 800; letter-spacing: -0.03em; }
+  .header h1 span { color: var(--red); }
+  .header-right { display: flex; align-items: center; gap: 1rem; flex-wrap: wrap; }
+
+  .live-badge {
+    display: flex; align-items: center; gap: 0.5rem;
+    background: rgba(255,51,85,0.15); border: 1px solid rgba(255,51,85,0.4);
+    color: var(--red); padding: 0.3rem 0.9rem; border-radius: 999px;
+    font-family: var(--font-mono); font-size: 0.72rem; font-weight: 700;
+  }
+  .live-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--red); animation: blink 1s infinite; }
+  @keyframes blink { 0%,100%{opacity:1} 50%{opacity:0.15} }
+
+  .reset-btn {
+    background: rgba(255,51,85,0.15); border: 1px solid rgba(255,51,85,0.4);
+    color: var(--red); padding: 0.4rem 1.1rem; border-radius: 8px;
+    cursor: pointer; font-family: var(--font-mono); font-size: 0.75rem; font-weight: 700;
+    transition: all 0.2s;
+  }
+  .reset-btn:hover { background: rgba(255,51,85,0.3); }
+
+  .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px,1fr)); gap: 1rem; }
+  .stat-card { background: var(--panel); border: 1px solid var(--border); border-radius: 12px; padding: 1.25rem; text-align: center; }
+  .stat-label { font-size: 0.63rem; font-family: var(--font-mono); color: var(--muted); text-transform: uppercase; letter-spacing: 0.12em; margin-bottom: 0.4rem; }
+  .stat-value { font-size: 2.8rem; font-weight: 800; font-family: var(--font-mono); line-height: 1; transition: color 0.4s; }
+
+  .health-panel { background: var(--panel); border: 1px solid var(--border); border-radius: 12px; padding: 1.25rem; }
+  .health-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; }
+  .health-title { font-size: 0.65rem; font-family: var(--font-mono); color: var(--muted); text-transform: uppercase; letter-spacing: 0.12em; }
+  .health-pct { font-size: 0.85rem; font-weight: 700; font-family: var(--font-mono); transition: color 0.4s; }
+  .health-track { height: 16px; background: rgba(255,255,255,0.06); border-radius: 999px; overflow: hidden; }
+  .health-fill { height: 100%; border-radius: 999px; transition: width 0.5s ease, background 0.5s ease; width: 100%; background: var(--green); }
+
+  .main-grid { display: grid; grid-template-columns: 280px 1fr; gap: 1rem; flex: 1; min-height: 0; }
+  @media(max-width:680px){ .main-grid{ grid-template-columns: 1fr; } }
+
+  .duck-panel {
+    background: var(--panel); border: 1px solid var(--border); border-radius: 12px;
+    padding: 1.5rem; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1rem;
+  }
+  .duck-panel-title { font-size: 0.65rem; font-family: var(--font-mono); color: var(--muted); text-transform: uppercase; letter-spacing: 0.12em; align-self: flex-start; }
+  .duck-svg { transition: filter 0.6s; }
+  .duck-msg { font-size: 0.8rem; font-weight: 600; text-align: center; font-family: var(--font-mono); min-height: 2.5rem; transition: color 0.4s; line-height: 1.5; }
+
+  .feed-panel { background: var(--panel); border: 1px solid var(--border); border-radius: 12px; padding: 1.25rem; display: flex; flex-direction: column; min-height: 220px; }
+  .feed-title { font-size: 0.65rem; font-family: var(--font-mono); color: var(--muted); text-transform: uppercase; letter-spacing: 0.12em; margin-bottom: 0.75rem; flex-shrink: 0; }
+  .feed-list { display: flex; flex-direction: column-reverse; gap: 0.28rem; overflow-y: auto; flex: 1; scrollbar-width: thin; scrollbar-color: rgba(255,255,255,0.1) transparent; }
+  .feed-item { display: flex; align-items: center; gap: 0.6rem; font-family: var(--font-mono); font-size: 0.7rem; padding: 0.28rem 0.5rem; border-radius: 5px; animation: fadein 0.3s ease both; }
+  @keyframes fadein { from{opacity:0;transform:translateX(-6px)} to{opacity:1;transform:none} }
+  .feed-item.ok   { background: rgba(0,255,136,0.06); color: #6ee7b7; }
+  .feed-item.warn { background: rgba(255,215,0,0.08); color: #fde68a; }
+  .feed-item.err  { background: rgba(255,51,85,0.1);  color: #fca5a5; }
+  .feed-dot { width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; }
+  .feed-item.ok   .feed-dot { background: var(--green); }
+  .feed-item.warn .feed-dot { background: var(--yellow); }
+  .feed-item.err  .feed-dot { background: var(--red); }
+
+  .students-panel { background: var(--panel); border: 1px solid var(--border); border-radius: 12px; padding: 1.25rem; }
+  .students-title { font-size: 0.65rem; font-family: var(--font-mono); color: var(--muted); text-transform: uppercase; letter-spacing: 0.12em; margin-bottom: 0.75rem; }
+  .students-grid { display: flex; flex-wrap: wrap; gap: 0.5rem; }
+  .student-chip {
+    font-family: var(--font-mono); font-size: 0.7rem; padding: 0.25rem 0.65rem;
+    border-radius: 6px; border: 1px solid var(--border);
+    background: rgba(0,170,255,0.08); color: var(--blue); transition: all 0.3s;
+  }
+  .student-chip.warn { background: rgba(255,215,0,0.1);  color: var(--yellow); border-color: rgba(255,215,0,0.3); }
+  .student-chip.dead { background: rgba(255,51,85,0.1);  color: var(--red);    border-color: rgba(255,51,85,0.3); }
+
+  .hint-bar {
+    background: var(--panel); border: 1px solid var(--border); border-radius: 10px;
+    padding: 0.75rem 1.25rem; font-family: var(--font-mono); font-size: 0.74rem;
+    color: var(--muted); display: flex; align-items: center; gap: 0.6rem; flex-wrap: wrap;
+  }
+  .hint-bar .url { color: var(--blue); font-weight: 700; word-break: break-all; }
+</style>
+</head>
+<body>
+
+<div id="connecting">
+  <div class="spin"></div>
+  <p>Connecting to Firebase...</p>
+  <p id="conn-err"></p>
+</div>
+
+<div class="header">
+  <h1>🌐 Server <span>Attack</span> Monitor</h1>
+  <div class="header-right">
+    <div class="live-badge"><div class="live-dot"></div> LIVE</div>
+    <button class="reset-btn" onclick="resetAll()">⚠ Reset Simulation</button>
+  </div>
+</div>
+
+<div class="stats-grid">
+  <div class="stat-card">
+    <div class="stat-label">Total Requests</div>
+    <div class="stat-value" id="t-total"    style="color:var(--blue)">0</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-label">Active Students</div>
+    <div class="stat-value" id="t-students" style="color:var(--green)">0</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-label">Rejected</div>
+    <div class="stat-value" id="t-rejected" style="color:var(--red)">0</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-label">Crashed Ducks</div>
+    <div class="stat-value" id="t-crashed"  style="color:var(--yellow)">0</div>
+  </div>
+</div>
+
+<div class="health-panel">
+  <div class="health-header">
+    <div class="health-title">⚡ Server Health</div>
+    <div class="health-pct" id="t-health-label" style="color:var(--green)">ONLINE — 100%</div>
+  </div>
+  <div class="health-track">
+    <div class="health-fill" id="t-health-bar"></div>
+  </div>
+</div>
+
+<div class="main-grid">
+  <div class="duck-panel">
+    <div class="duck-panel-title">🦆 Server Duck Status</div>
+    <svg class="duck-svg" id="t-duck" width="140" height="140" viewBox="0 0 120 120">
+      <ellipse cx="60" cy="78" rx="38" ry="28" fill="#FFD700"/>
+      <ellipse cx="72" cy="82" rx="18" ry="10" fill="#FFC107" opacity="0.8"/>
+      <circle cx="55" cy="48" r="22" fill="#FFD700"/>
+      <ellipse cx="37" cy="50" rx="12" ry="7" fill="#FF8C00"/>
+      <circle cx="48" cy="43" r="4" fill="#1a1a2e"/>
+      <circle cx="49.5" cy="41.5" r="1.5" fill="white"/>
+      <rect x="65" y="58" width="20" height="28" rx="3" fill="#1a2a4a" stroke="#00aaff" stroke-width="1.5"/>
+      <rect x="68" y="62" width="14" height="3" rx="1" fill="#00ff88"/>
+      <rect x="68" y="67" width="14" height="3" rx="1" fill="#00ff88"/>
+      <rect x="68" y="72" width="14" height="3" rx="1" fill="#ffd700"/>
+      <line x1="60" y1="26" x2="60" y2="12" stroke="#00aaff" stroke-width="2"/>
+      <circle cx="60" cy="10" r="3" fill="#00aaff"/>
+    </svg>
+    <div class="duck-msg" id="t-duck-msg" style="color:var(--green)">✓ Healthy — serving requests normally</div>
+  </div>
+
+  <div class="feed-panel">
+    <div class="feed-title">📡 Live Request Feed</div>
+    <div class="feed-list" id="t-feed"></div>
+  </div>
+</div>
+
+<div class="students-panel">
+  <div class="students-title">👥 Student Activity</div>
+  <div class="students-grid" id="students-grid">
+    <span style="font-family:var(--font-mono);font-size:0.72rem;color:var(--muted)">Waiting for students to connect...</span>
+  </div>
+</div>
+
+<div class="hint-bar">
+  📌 Share this link with students → <span class="url" id="student-url">loading...</span>
+</div>
+
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
+<script>
+// ╔══════════════════════════════════════════════════════╗
+// ║  STEP 1: PASTE YOUR FIREBASE CONFIG HERE             ║
+// ║  Replace every value below with your own project's   ║
+// ╚══════════════════════════════════════════════════════╝
+const firebaseConfig = {
+  apiKey: "AIzaSyAjlPEZC2AWVLuXXZXXQMyVB0YQThlSbn4",
+  authDomain: "ddos-demo-f0ca9.firebaseapp.com",
+  databaseURL: "https://ddos-demo-f0ca9-default-rtdb.asia-southeast1.firebasedatabase.app",
+  projectId: "ddos-demo-f0ca9",
+  storageBucket: "ddos-demo-f0ca9.firebasestorage.app",
+  messagingSenderId: "898477434766",
+  appId: "1:898477434766:web:e87926ba2136f77e89a6df"
+};
+// ══════════════════════════════════════════════════════
+
+const OVERLOAD_AT = 50;
+
+// Show student URL in the hint bar
+document.getElementById('student-url').textContent =
+  location.href.replace('teacher.html', 'student.html');
+
+let db;
+try {
+  firebase.initializeApp(firebaseConfig);
+  db = firebase.database();
+} catch(e) {
+  document.getElementById('conn-err').style.display = 'block';
+  document.getElementById('conn-err').textContent =
+    'Firebase config error: ' + e.message + '. Please paste your config values into teacher.html.';
+}
+
+if (db) {
+  const globalRef   = db.ref('ddos/global');
+  const studentsRef = db.ref('ddos/students');
+  const feedRef     = db.ref('ddos/feed');
+
+  // connection status
+  db.ref('.info/connected').on('value', snap => {
+    document.getElementById('connecting').style.display =
+      snap.val() ? 'none' : 'flex';
+  });
+
+  // ── RESET ──
+  window.resetAll = function() {
+    globalRef.set({ total: 0, rejected: 0, resetAt: Date.now() });
+    studentsRef.remove();
+    feedRef.remove();
+    document.getElementById('t-feed').innerHTML = '';
+    document.body.classList.remove('overloaded');
+  };
+
+  // ── GLOBAL STATS ──
+  globalRef.on('value', snap => {
+    const d        = snap.val() || {};
+    const total    = d.total    || 0;
+    const rejected = d.rejected || 0;
+
+    document.getElementById('t-total').textContent    = total;
+    document.getElementById('t-rejected').textContent = rejected;
+
+    const rejRatio    = total > 0 ? rejected / total : 0;
+    const loadPenalty = Math.min(70, Math.floor(total / 4));
+    const health      = Math.max(0, Math.min(100, 100 - Math.round(rejRatio * 100) - loadPenalty));
+
+    const hBar   = document.getElementById('t-health-bar');
+    const hLabel = document.getElementById('t-health-label');
+    hBar.style.width = health + '%';
+
+    if (health > 60) {
+      hBar.style.background = 'var(--green)';
+      hLabel.style.color    = 'var(--green)';
+      hLabel.textContent    = `ONLINE — ${health}%`;
+      document.body.classList.remove('overloaded');
+    } else if (health > 30) {
+      hBar.style.background = 'var(--yellow)';
+      hLabel.style.color    = 'var(--yellow)';
+      hLabel.textContent    = `DEGRADED — ${health}%`;
+      document.body.classList.remove('overloaded');
+    } else {
+      hBar.style.background = 'var(--red)';
+      hLabel.style.color    = 'var(--red)';
+      hLabel.textContent    = `OVERLOADED — ${health}%`;
+      document.body.classList.add('overloaded');
+    }
+
+    const dMsg = document.getElementById('t-duck-msg');
+    const dSvg = document.getElementById('t-duck');
+    if (health > 60) {
+      dMsg.style.color = 'var(--green)';  dMsg.textContent = '✓ Healthy — serving requests normally'; dSvg.style.filter = 'none';
+    } else if (health > 30) {
+      dMsg.style.color = 'var(--yellow)'; dMsg.textContent = '⚠ Struggling... response time degraded!'; dSvg.style.filter = 'grayscale(50%) sepia(30%)';
+    } else {
+      dMsg.style.color = 'var(--red)';    dMsg.textContent = '✗ OVERLOADED! Dropping all requests!'; dSvg.style.filter = 'grayscale(100%) brightness(0.45)';
+    }
+  });
+
+  // ── STUDENTS ──
+  studentsRef.on('value', snap => {
+    const data  = snap.val() || {};
+    const grid  = document.getElementById('students-grid');
+    const ids   = Object.keys(data);
+    grid.innerHTML = '';
+
+    if (ids.length === 0) {
+      grid.innerHTML = '<span style="font-family:var(--font-mono);font-size:0.72rem;color:var(--muted)">Waiting for students to connect...</span>';
+      document.getElementById('t-students').textContent = 0;
+      document.getElementById('t-crashed').textContent  = 0;
+      return;
+    }
+
+    let crashed = 0;
+    ids.forEach(id => {
+      const s     = data[id];
+      const count = s.count || 0;
+      const dead  = s.dead  || false;
+      if (dead) crashed++;
+      const chip = document.createElement('div');
+      chip.className = 'student-chip' + (dead ? ' dead' : count >= 15 ? ' warn' : '');
+      chip.textContent = `${s.name || ('Student ' + id.slice(-4))} — ${count} req${dead ? ' 💀' : ''}`;
+      grid.appendChild(chip);
+    });
+
+    document.getElementById('t-students').textContent = ids.length;
+    document.getElementById('t-crashed').textContent  = crashed;
+  });
+
+  // ── FEED ──
+  let initialLoad = true;
+  feedRef.limitToLast(40).once('value', () => { initialLoad = false; });
+  feedRef.limitToLast(40).on('child_added', snap => {
+    if (initialLoad) return; // skip old entries on first load
+    const ev   = snap.val();
+    if (!ev) return;
+    const feed = document.getElementById('t-feed');
+    const div  = document.createElement('div');
+    div.className = `feed-item ${ev.type}`;
+    const dot = document.createElement('div'); dot.className = 'feed-dot';
+    const txt = document.createElement('span'); txt.textContent = ev.msg;
+    div.appendChild(dot); div.appendChild(txt);
+    feed.appendChild(div);
+    while (feed.children.length > 40) feed.removeChild(feed.firstChild);
+  });
+}
+</script>
+</body>
+</html>

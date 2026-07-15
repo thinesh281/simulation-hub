@@ -1,0 +1,1538 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>NETWORK SWITCHING SIMULATION</title>
+<link href="https://fonts.googleapis.com/css2?family=VT323&family=Space+Mono:wght@400;700&family=Major+Mono+Display&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg: #0a0e0a;
+  --bg-2: #0f1810;
+  --phosphor: #4ade80;
+  --phosphor-dim: #166534;
+  --phosphor-glow: #86efac;
+  --amber: #fbbf24;
+  --amber-glow: #fde68a;
+  --magenta: #f472b6;
+  --cyan: #22d3ee;
+  --red: #ef4444;
+  --grid: rgba(74, 222, 128, 0.08);
+  --panel: rgba(22, 101, 52, 0.15);
+  --border: rgba(74, 222, 128, 0.4);
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+html, body {
+  background: var(--bg);
+  color: var(--phosphor);
+  font-family: 'Space Mono', monospace;
+  min-height: 100vh;
+  overflow-x: hidden;
+}
+
+/* CRT scanlines */
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  background: repeating-linear-gradient(
+    0deg,
+    transparent 0,
+    transparent 2px,
+    rgba(0, 0, 0, 0.15) 2px,
+    rgba(0, 0, 0, 0.15) 4px
+  );
+  pointer-events: none;
+  z-index: 1000;
+  animation: scan 8s linear infinite;
+}
+
+body::after {
+  content: '';
+  position: fixed;
+  inset: 0;
+  background: radial-gradient(ellipse at center, transparent 40%, rgba(0,0,0,0.6) 100%);
+  pointer-events: none;
+  z-index: 999;
+}
+
+@keyframes scan {
+  0% { transform: translateY(0); }
+  100% { transform: translateY(4px); }
+}
+
+.bg-grid {
+  position: fixed;
+  inset: 0;
+  background-image:
+    linear-gradient(var(--grid) 1px, transparent 1px),
+    linear-gradient(90deg, var(--grid) 1px, transparent 1px);
+  background-size: 40px 40px;
+  z-index: 0;
+  mask-image: radial-gradient(ellipse at center, black 30%, transparent 80%);
+}
+
+.app {
+  position: relative;
+  z-index: 2;
+  max-width: 1280px;
+  margin: 0 auto;
+  padding: 24px;
+}
+
+/* ============ HEADER ============ */
+.header {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 20px;
+  align-items: end;
+  border-bottom: 2px solid var(--border);
+  padding-bottom: 20px;
+  margin-bottom: 24px;
+}
+
+.title-block h1 {
+  font-family: 'Major Mono Display', monospace;
+  font-size: clamp(28px, 5vw, 52px);
+  letter-spacing: -0.02em;
+  color: var(--phosphor-glow);
+  text-shadow: 0 0 20px var(--phosphor), 0 0 40px var(--phosphor-dim);
+  line-height: 0.9;
+}
+
+.title-block .sub {
+  font-family: 'VT323', monospace;
+  font-size: 18px;
+  color: var(--phosphor);
+  letter-spacing: 0.1em;
+  margin-top: 8px;
+  opacity: 0.8;
+}
+
+.title-block .sub::before { content: '> '; color: var(--amber); }
+
+.hud {
+  display: flex;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.hud-item {
+  font-family: 'VT323', monospace;
+  font-size: 16px;
+  border: 1px solid var(--border);
+  padding: 8px 14px;
+  background: var(--panel);
+  letter-spacing: 0.05em;
+  min-width: 100px;
+}
+
+.hud-item .label { color: var(--phosphor-dim); display: block; font-size: 11px; text-transform: uppercase; }
+.hud-item .val { color: var(--amber); font-size: 22px; font-weight: bold; text-shadow: 0 0 8px var(--amber); }
+
+/* ============ MODE TABS ============ */
+.tabs {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 0;
+  margin-bottom: 24px;
+  border: 1px solid var(--border);
+}
+
+.tab {
+  background: transparent;
+  border: none;
+  border-right: 1px solid var(--border);
+  color: var(--phosphor-dim);
+  padding: 16px 12px;
+  font-family: 'Space Mono', monospace;
+  font-size: 13px;
+  letter-spacing: 0.1em;
+  cursor: pointer;
+  text-align: left;
+  transition: all 0.2s;
+  position: relative;
+}
+
+.tab:last-child { border-right: none; }
+
+.tab:hover {
+  background: rgba(74, 222, 128, 0.05);
+  color: var(--phosphor);
+}
+
+.tab.active {
+  background: var(--phosphor);
+  color: var(--bg);
+  font-weight: bold;
+}
+
+.tab .num {
+  display: block;
+  font-family: 'Major Mono Display', monospace;
+  font-size: 22px;
+  margin-bottom: 4px;
+}
+
+/* ============ STAGE / SCENE ============ */
+.scene {
+  border: 1px solid var(--border);
+  background: linear-gradient(180deg, rgba(15,24,16,0.9), rgba(10,14,10,0.7));
+  padding: 28px;
+  min-height: 540px;
+  position: relative;
+  overflow: hidden;
+}
+
+.scene::before {
+  content: 'CH-01';
+  position: absolute;
+  top: 12px;
+  right: 16px;
+  font-family: 'VT323', monospace;
+  font-size: 13px;
+  color: var(--phosphor-dim);
+  letter-spacing: 0.2em;
+}
+
+.scene-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  margin-bottom: 8px;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.scene-header h2 {
+  font-family: 'Major Mono Display', monospace;
+  font-size: 28px;
+  color: var(--amber);
+  text-shadow: 0 0 12px rgba(251, 191, 36, 0.5);
+  letter-spacing: -0.01em;
+}
+
+.scene-header .stage-tag {
+  font-family: 'VT323', monospace;
+  font-size: 16px;
+  color: var(--phosphor);
+  border: 1px dashed var(--border);
+  padding: 2px 10px;
+}
+
+.brief {
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--phosphor);
+  margin-bottom: 24px;
+  padding: 12px 14px;
+  border-left: 3px solid var(--amber);
+  background: rgba(251, 191, 36, 0.05);
+  max-width: 880px;
+}
+
+.brief strong { color: var(--amber-glow); }
+
+/* ============ STAGE PROGRESS ============ */
+.stage-progress {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 20px;
+  flex-wrap: wrap;
+}
+
+.stage-pill {
+  flex: 1;
+  min-width: 140px;
+  border: 1px solid var(--phosphor-dim);
+  padding: 8px 12px;
+  font-family: 'VT323', monospace;
+  font-size: 14px;
+  letter-spacing: 0.08em;
+  color: var(--phosphor-dim);
+  position: relative;
+  background: rgba(0,0,0,0.3);
+}
+
+.stage-pill.done {
+  border-color: var(--amber);
+  color: var(--amber);
+  background: rgba(251,191,36,0.08);
+}
+
+.stage-pill.current {
+  border-color: var(--phosphor);
+  color: var(--phosphor-glow);
+  background: rgba(74,222,128,0.1);
+  box-shadow: 0 0 14px rgba(74,222,128,0.3) inset;
+}
+
+.stage-pill .step-num {
+  font-family: 'Major Mono Display', monospace;
+  margin-right: 6px;
+}
+
+/* ============ MODE 1: CIRCUIT ============ */
+.circuit-stage {
+  background: rgba(0,0,0,0.4);
+  border: 1px dashed var(--phosphor-dim);
+  padding: 40px 20px;
+  margin-bottom: 20px;
+  position: relative;
+  min-height: 240px;
+}
+
+.circuit-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  position: relative;
+}
+
+.node {
+  flex-shrink: 0;
+  width: 110px;
+  height: 110px;
+  border: 2px solid var(--phosphor-dim);
+  background: var(--bg-2);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  font-family: 'VT323', monospace;
+  font-size: 14px;
+  color: var(--phosphor-dim);
+  transition: all 0.25s;
+  position: relative;
+  letter-spacing: 0.1em;
+}
+
+.node .glyph {
+  font-family: 'Major Mono Display', monospace;
+  font-size: 36px;
+  margin-bottom: 4px;
+  line-height: 1;
+}
+
+.node[data-type="sender"] .glyph::before { content: '◤'; }
+.node[data-type="switch"] .glyph::before { content: '◇'; }
+.node[data-type="receiver"] .glyph::before { content: '◢'; }
+
+.node:not(.disabled):hover {
+  border-color: var(--phosphor);
+  color: var(--phosphor);
+  transform: translateY(-2px);
+}
+
+.node.selected {
+  border-color: var(--amber);
+  color: var(--amber);
+  background: rgba(251,191,36,0.1);
+  box-shadow: 0 0 30px rgba(251,191,36,0.5), 0 0 60px rgba(251,191,36,0.2) inset;
+  animation: pulse-amber 1.5s ease-in-out infinite;
+}
+
+.node.in-path {
+  border-color: var(--phosphor);
+  color: var(--phosphor-glow);
+  background: rgba(74,222,128,0.15);
+  box-shadow: 0 0 24px rgba(74,222,128,0.5);
+}
+
+.node.disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
+}
+
+@keyframes pulse-amber {
+  0%, 100% { box-shadow: 0 0 30px rgba(251,191,36,0.5); }
+  50% { box-shadow: 0 0 50px rgba(251,191,36,0.8); }
+}
+
+.cable {
+  flex: 1;
+  height: 4px;
+  background: var(--phosphor-dim);
+  position: relative;
+  margin: 0 -2px;
+  z-index: 0;
+}
+
+.cable.active {
+  background: var(--phosphor);
+  box-shadow: 0 0 12px var(--phosphor), 0 0 24px var(--phosphor-glow);
+}
+
+.cable.transmitting::after {
+  content: '';
+  position: absolute;
+  top: -3px;
+  left: 0;
+  width: 20px;
+  height: 10px;
+  background: var(--amber);
+  border-radius: 2px;
+  box-shadow: 0 0 12px var(--amber);
+  animation: travel 1.2s linear infinite;
+}
+
+@keyframes travel {
+  0% { left: 0%; }
+  100% { left: calc(100% - 20px); }
+}
+
+.controls {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 16px;
+}
+
+.btn {
+  background: transparent;
+  border: 2px solid var(--phosphor);
+  color: var(--phosphor);
+  padding: 10px 22px;
+  font-family: 'Space Mono', monospace;
+  font-size: 13px;
+  font-weight: bold;
+  letter-spacing: 0.1em;
+  cursor: pointer;
+  transition: all 0.2s;
+  text-transform: uppercase;
+  position: relative;
+}
+
+.btn::before {
+  content: '▸ ';
+  color: var(--amber);
+}
+
+.btn:not(:disabled):hover {
+  background: var(--phosphor);
+  color: var(--bg);
+  box-shadow: 0 0 20px var(--phosphor);
+}
+
+.btn:not(:disabled):hover::before { color: var(--bg); }
+
+.btn:disabled { opacity: 0.3; cursor: not-allowed; }
+
+.btn.danger {
+  border-color: var(--red);
+  color: var(--red);
+}
+.btn.danger::before { color: var(--red); }
+.btn.danger:not(:disabled):hover { background: var(--red); color: var(--bg); box-shadow: 0 0 20px var(--red); }
+.btn.danger:not(:disabled):hover::before { color: var(--bg); }
+
+.btn.amber {
+  border-color: var(--amber);
+  color: var(--amber);
+}
+.btn.amber::before { color: var(--amber); }
+.btn.amber:not(:disabled):hover { background: var(--amber); color: var(--bg); box-shadow: 0 0 20px var(--amber); }
+
+.console {
+  background: #000;
+  border: 1px solid var(--phosphor-dim);
+  padding: 12px 14px;
+  font-family: 'VT323', monospace;
+  font-size: 15px;
+  line-height: 1.5;
+  color: var(--phosphor);
+  height: 140px;
+  overflow-y: auto;
+  letter-spacing: 0.04em;
+}
+
+.console .line { white-space: pre-wrap; }
+.console .line::before { content: '$ '; color: var(--phosphor-dim); }
+.console .line.ok { color: var(--phosphor-glow); }
+.console .line.warn { color: var(--amber); }
+.console .line.err { color: var(--red); }
+.console .line.info { color: var(--cyan); }
+
+/* ============ MODE 2: FDM ============ */
+.fdm-cable {
+  border: 2px solid var(--border);
+  background: linear-gradient(180deg, rgba(0,0,0,0.6), rgba(15,24,16,0.4));
+  padding: 16px;
+  margin-bottom: 20px;
+}
+
+.fdm-cable-label {
+  display: flex;
+  justify-content: space-between;
+  font-family: 'VT323', monospace;
+  font-size: 14px;
+  color: var(--phosphor-dim);
+  letter-spacing: 0.1em;
+  margin-bottom: 12px;
+  border-bottom: 1px dashed var(--phosphor-dim);
+  padding-bottom: 8px;
+}
+
+.lanes {
+  display: grid;
+  gap: 10px;
+}
+
+.lane {
+  display: grid;
+  grid-template-columns: 80px 1fr 140px;
+  align-items: center;
+  gap: 12px;
+  padding: 14px;
+  border: 2px dashed var(--phosphor-dim);
+  background: rgba(0,0,0,0.3);
+  min-height: 64px;
+  transition: all 0.2s;
+}
+
+.lane.drag-over {
+  border-style: solid;
+  border-color: var(--amber);
+  background: rgba(251,191,36,0.08);
+}
+
+.lane.occupied {
+  border-style: solid;
+}
+
+.lane[data-freq="0"] { --lane-color: #f472b6; }
+.lane[data-freq="1"] { --lane-color: #22d3ee; }
+.lane[data-freq="2"] { --lane-color: #fbbf24; }
+.lane[data-freq="3"] { --lane-color: #a78bfa; }
+
+.lane.occupied { border-color: var(--lane-color); box-shadow: 0 0 16px rgba(0,0,0,0) inset; }
+
+.lane-freq {
+  font-family: 'Major Mono Display', monospace;
+  font-size: 18px;
+  color: var(--lane-color);
+  text-shadow: 0 0 10px var(--lane-color);
+  letter-spacing: -0.02em;
+}
+
+.lane-wave {
+  height: 36px;
+  position: relative;
+  overflow: hidden;
+  border-left: 1px solid var(--phosphor-dim);
+  border-right: 1px solid var(--phosphor-dim);
+}
+
+.lane-wave svg {
+  width: 100%;
+  height: 100%;
+  stroke: var(--lane-color);
+  stroke-width: 1.5;
+  fill: none;
+  opacity: 0.4;
+}
+
+.lane.occupied .lane-wave svg { opacity: 1; filter: drop-shadow(0 0 4px var(--lane-color)); }
+
+.lane-slot {
+  min-height: 40px;
+  border: 1px dotted var(--phosphor-dim);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: 'VT323', monospace;
+  font-size: 12px;
+  color: var(--phosphor-dim);
+  letter-spacing: 0.1em;
+  padding: 4px;
+}
+
+.lane.occupied .lane-slot { border: none; }
+
+.users-pool {
+  border: 1px solid var(--border);
+  padding: 16px;
+  background: rgba(0,0,0,0.3);
+  margin-bottom: 20px;
+}
+
+.users-pool h3 {
+  font-family: 'VT323', monospace;
+  font-size: 16px;
+  color: var(--phosphor-dim);
+  letter-spacing: 0.15em;
+  margin-bottom: 10px;
+}
+
+.users-pool h3::before { content: '// '; color: var(--amber); }
+
+.users-list {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  min-height: 60px;
+}
+
+.user-chip {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 16px;
+  border: 2px solid;
+  background: rgba(0,0,0,0.5);
+  font-family: 'Space Mono', monospace;
+  font-size: 13px;
+  font-weight: bold;
+  letter-spacing: 0.1em;
+  cursor: grab;
+  user-select: none;
+  transition: all 0.2s;
+}
+
+.user-chip:active { cursor: grabbing; }
+
+.user-chip.dragging { opacity: 0.4; }
+
+.user-chip[data-user="A"] { border-color: var(--magenta); color: var(--magenta); }
+.user-chip[data-user="B"] { border-color: var(--cyan); color: var(--cyan); }
+.user-chip[data-user="C"] { border-color: var(--amber); color: var(--amber); }
+.user-chip[data-user="D"] { border-color: #a78bfa; color: #a78bfa; }
+
+.user-chip:hover {
+  box-shadow: 0 0 16px currentColor;
+  transform: translateY(-2px);
+}
+
+.user-chip .pulse {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: currentColor;
+  box-shadow: 0 0 8px currentColor;
+  animation: blink 1s ease-in-out infinite;
+}
+
+@keyframes blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.3; }
+}
+
+/* ============ MODE 3: TDM ============ */
+.tdm-channel {
+  border: 2px solid var(--border);
+  background: linear-gradient(180deg, rgba(0,0,0,0.6), rgba(15,24,16,0.4));
+  padding: 16px;
+  margin-bottom: 20px;
+}
+
+.tdm-cable-label {
+  display: flex;
+  justify-content: space-between;
+  font-family: 'VT323', monospace;
+  font-size: 14px;
+  color: var(--phosphor-dim);
+  letter-spacing: 0.1em;
+  margin-bottom: 12px;
+  border-bottom: 1px dashed var(--phosphor-dim);
+  padding-bottom: 8px;
+}
+
+.tdm-frame {
+  display: grid;
+  gap: 6px;
+  position: relative;
+  margin-bottom: 12px;
+}
+
+.tdm-slots {
+  display: grid;
+  grid-template-columns: 60px repeat(8, 1fr);
+  gap: 4px;
+  align-items: stretch;
+}
+
+.tdm-axis {
+  font-family: 'VT323', monospace;
+  font-size: 11px;
+  color: var(--phosphor-dim);
+  display: flex;
+  align-items: center;
+  letter-spacing: 0.1em;
+}
+
+.tdm-slot {
+  border: 2px dashed var(--phosphor-dim);
+  background: rgba(0,0,0,0.3);
+  min-height: 70px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  font-family: 'VT323', monospace;
+  font-size: 11px;
+  color: var(--phosphor-dim);
+  cursor: pointer;
+  transition: all 0.2s;
+  position: relative;
+  letter-spacing: 0.05em;
+}
+
+.tdm-slot .slot-num {
+  font-family: 'Major Mono Display', monospace;
+  font-size: 16px;
+  color: var(--phosphor);
+  margin-bottom: 4px;
+}
+
+.tdm-slot.drag-over {
+  border-style: solid;
+  border-color: var(--amber);
+  background: rgba(251,191,36,0.08);
+}
+
+.tdm-slot.filled {
+  border-style: solid;
+}
+
+.tdm-slot.filled[data-user="A"] { border-color: var(--magenta); background: rgba(244,114,182,0.15); color: var(--magenta); }
+.tdm-slot.filled[data-user="B"] { border-color: var(--cyan); background: rgba(34,211,238,0.15); color: var(--cyan); }
+.tdm-slot.filled[data-user="C"] { border-color: var(--amber); background: rgba(251,191,36,0.15); color: var(--amber); }
+
+.tdm-slot.playing {
+  box-shadow: 0 0 24px currentColor, 0 0 12px currentColor inset;
+  transform: scale(1.05);
+  z-index: 5;
+}
+
+.tdm-pointer {
+  position: absolute;
+  bottom: -8px;
+  left: 60px;
+  width: 12px;
+  height: 12px;
+  background: var(--phosphor);
+  clip-path: polygon(50% 0%, 0% 100%, 100% 100%);
+  box-shadow: 0 0 8px var(--phosphor);
+  pointer-events: none;
+  transition: left 0.6s cubic-bezier(0.6, 0, 0.4, 1);
+}
+
+.tdm-axis-label {
+  display: grid;
+  grid-template-columns: 60px 1fr;
+  font-family: 'VT323', monospace;
+  font-size: 12px;
+  color: var(--phosphor-dim);
+  letter-spacing: 0.15em;
+  margin-top: 4px;
+}
+
+.tdm-axis-label .scale {
+  display: flex;
+  justify-content: space-between;
+  position: relative;
+}
+
+.tdm-axis-label .scale::before {
+  content: '';
+  position: absolute;
+  left: 0; right: 0; top: 6px;
+  height: 1px;
+  background: var(--phosphor-dim);
+}
+
+/* ============ TEACHING / FEEDBACK ============ */
+.teaching {
+  margin-top: 20px;
+  padding: 16px 18px;
+  border: 1px solid var(--border);
+  background: linear-gradient(135deg, rgba(74,222,128,0.05), rgba(34,211,238,0.05));
+  font-size: 13px;
+  line-height: 1.7;
+}
+
+.teaching .head {
+  font-family: 'VT323', monospace;
+  font-size: 18px;
+  color: var(--amber);
+  letter-spacing: 0.1em;
+  margin-bottom: 8px;
+}
+
+.teaching .head::before { content: '◈ '; }
+
+/* ============ COMPARISON ============ */
+.compare-section {
+  margin-top: 32px;
+  border-top: 2px dashed var(--border);
+  padding-top: 24px;
+}
+
+.compare-section h2 {
+  font-family: 'Major Mono Display', monospace;
+  font-size: 22px;
+  color: var(--amber);
+  text-shadow: 0 0 10px var(--amber);
+  margin-bottom: 16px;
+  letter-spacing: -0.01em;
+}
+
+.compare-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.compare-card {
+  border: 1px solid var(--border);
+  padding: 16px;
+  background: rgba(0,0,0,0.4);
+}
+
+.compare-card h3 {
+  font-family: 'Major Mono Display', monospace;
+  font-size: 16px;
+  margin-bottom: 12px;
+  letter-spacing: -0.02em;
+}
+
+.compare-card[data-type="cs"] h3 { color: var(--magenta); text-shadow: 0 0 8px var(--magenta); }
+.compare-card[data-type="fdm"] h3 { color: var(--cyan); text-shadow: 0 0 8px var(--cyan); }
+.compare-card[data-type="tdm"] h3 { color: var(--amber); text-shadow: 0 0 8px var(--amber); }
+
+.compare-card ul {
+  list-style: none;
+  font-family: 'VT323', monospace;
+  font-size: 15px;
+  line-height: 1.6;
+}
+
+.compare-card li {
+  padding: 4px 0;
+  border-bottom: 1px dotted var(--phosphor-dim);
+}
+
+.compare-card li::before { content: '▸ '; color: var(--amber); }
+
+.compare-card li:last-child { border-bottom: none; }
+
+/* ============ TOAST ============ */
+.toast {
+  position: fixed;
+  top: 24px;
+  left: 50%;
+  transform: translateX(-50%) translateY(-100px);
+  padding: 12px 24px;
+  background: var(--bg-2);
+  border: 2px solid var(--amber);
+  color: var(--amber);
+  font-family: 'VT323', monospace;
+  font-size: 18px;
+  letter-spacing: 0.1em;
+  z-index: 200;
+  transition: transform 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
+  box-shadow: 0 0 30px rgba(251,191,36,0.5);
+}
+
+.toast.show { transform: translateX(-50%) translateY(0); }
+
+.toast.err { border-color: var(--red); color: var(--red); box-shadow: 0 0 30px rgba(239,68,68,0.5); }
+.toast.ok { border-color: var(--phosphor); color: var(--phosphor); box-shadow: 0 0 30px rgba(74,222,128,0.5); }
+
+/* ============ RESPONSIVE ============ */
+@media (max-width: 720px) {
+  .header { grid-template-columns: 1fr; }
+  .hud { justify-content: stretch; }
+  .hud-item { flex: 1; min-width: 0; }
+  .compare-grid { grid-template-columns: 1fr; }
+  .tdm-slots { grid-template-columns: 50px repeat(4, 1fr); }
+  .tdm-slots .tdm-slot:nth-child(n+6) { display: none; }
+  .node { width: 80px; height: 80px; font-size: 11px; }
+  .node .glyph { font-size: 24px; }
+  .scene-header h2 { font-size: 20px; }
+  .tab .num { font-size: 18px; }
+  .tab { font-size: 11px; padding: 12px 8px; }
+  .lane { grid-template-columns: 60px 1fr 110px; }
+}
+</style>
+</head>
+<body>
+<div class="bg-grid"></div>
+
+<div class="app">
+  <!-- HEADER -->
+  <header class="header">
+    <div class="title-block">
+      <h1>Network<br>Switching</h1>
+      <div class="sub">SIMULATION LAB // SESSION INITIATED</div>
+    </div>
+    <div class="hud">
+      <div class="hud-item">
+        <span class="label">MODE</span>
+        <span class="val" id="mode-disp">CS</span>
+      </div>
+      <div class="hud-item">
+        <span class="label">SESSION</span>
+        <span class="val" id="timer">00:00</span>
+      </div>
+    </div>
+  </header>
+
+  <!-- TABS -->
+  <nav class="tabs" id="tabs">
+    <button class="tab active" data-mode="1">
+      <span class="num">01</span>
+      CIRCUIT SWITCHING
+    </button>
+    <button class="tab" data-mode="2">
+      <span class="num">02</span>
+      FDM // FREQUENCY
+    </button>
+    <button class="tab" data-mode="3">
+      <span class="num">03</span>
+      TDM // TIME-SHARE
+    </button>
+  </nav>
+
+  <!-- SCENE -->
+  <main class="scene" id="scene"></main>
+</div>
+
+<!-- TOAST -->
+<div class="toast" id="toast"></div>
+
+<script>
+// ====================== STATE ======================
+const state = {
+  mode: 1,
+  timer: 0,
+  timerInterval: null,
+  // Mode 1
+  cs: {
+    stage: 0, // 0=establish, 1=transfer, 2=terminate
+    selectedPath: [],
+    requiredPath: ['sender','switch1','switch2','receiver'],
+    transmitting: false,
+  },
+  // Mode 2
+  fdm: {
+    assignments: { 0: null, 1: null, 2: null, 3: null }, // freq -> userId
+    users: ['A','B','C'],
+  },
+  // Mode 3
+  tdm: {
+    slots: [null,null,null,null,null,null,null,null], // index -> userId
+    users: ['A','B','C'],
+    playing: false,
+    playInterval: null,
+    pointer: 0,
+  },
+};
+
+// ====================== UTILITIES ======================
+const $ = sel => document.querySelector(sel);
+const $$ = sel => document.querySelectorAll(sel);
+
+function showToast(msg, type='') {
+  const t = $('#toast');
+  t.textContent = msg;
+  t.className = 'toast show ' + type;
+  setTimeout(() => t.classList.remove('show'), 2400);
+}
+
+function updateModeDisp() {
+  const labels = { 1: 'CS', 2: 'FDM', 3: 'TDM' };
+  $('#mode-disp').textContent = labels[state.mode];
+}
+
+function updateTabs() {
+  $$('.tab').forEach(tab => {
+    const m = parseInt(tab.dataset.mode);
+    tab.classList.toggle('active', m === state.mode);
+  });
+}
+
+function setMode(m) {
+  state.mode = m;
+  updateModeDisp();
+  updateTabs();
+  renderScene();
+}
+
+function startTimer() {
+  clearInterval(state.timerInterval);
+  state.timer = 0;
+  $('#timer').textContent = '00:00';
+  state.timerInterval = setInterval(() => {
+    state.timer++;
+    const m = String(Math.floor(state.timer/60)).padStart(2,'0');
+    const s = String(state.timer%60).padStart(2,'0');
+    $('#timer').textContent = `${m}:${s}`;
+  }, 1000);
+}
+
+// ====================== RENDER SCENE ======================
+function renderScene() {
+  const scene = $('#scene');
+  if (state.mode === 1) renderMode1(scene);
+  else if (state.mode === 2) renderMode2(scene);
+  else renderMode3(scene);
+}
+
+// ====================== MODE 1: CIRCUIT ======================
+function renderMode1(scene) {
+  const cs = state.cs;
+  const stages = [
+    { name: 'ESTABLISH CHANNEL', desc: 'Click nodes IN ORDER from sender to receiver to reserve the path.' },
+    { name: 'TRANSFER DATA', desc: 'Path locked. Initiate signal transmission across the dedicated circuit.' },
+    { name: 'TERMINATE', desc: 'Transmission complete. Release the channel so others can use the network.' },
+  ];
+
+  scene.innerHTML = `
+    <div class="scene-header">
+      <h2>Circuit Switching</h2>
+      <div class="stage-tag">PROTOCOL: PSTN-LIKE</div>
+    </div>
+    <p class="brief"><strong>Concept:</strong> Establish a dedicated end-to-end physical path before data flows. The path stays reserved for the entire session — no one else can use it until you tear it down.</p>
+
+    <div class="stage-progress">
+      ${stages.map((s,i) => `
+        <div class="stage-pill ${i < cs.stage ? 'done' : i === cs.stage ? 'current' : ''}">
+          <span class="step-num">0${i+1}</span>${s.name}
+        </div>
+      `).join('')}
+    </div>
+
+    <div class="circuit-stage">
+      <div class="circuit-row" id="circuit-row">
+        <div class="node" data-type="sender" data-id="sender">
+          <div class="glyph"></div>SENDER
+        </div>
+        <div class="cable" data-cable="0"></div>
+        <div class="node" data-type="switch" data-id="switch1">
+          <div class="glyph"></div>SWITCH-01
+        </div>
+        <div class="cable" data-cable="1"></div>
+        <div class="node" data-type="switch" data-id="switch2">
+          <div class="glyph"></div>SWITCH-02
+        </div>
+        <div class="cable" data-cable="2"></div>
+        <div class="node" data-type="receiver" data-id="receiver">
+          <div class="glyph"></div>RECEIVER
+        </div>
+      </div>
+    </div>
+
+    <p style="font-size:13px; color: var(--phosphor); margin-bottom:12px;">
+      <strong style="color:var(--amber)">▸ Stage ${cs.stage+1} — ${stages[cs.stage].name}</strong>
+      <span style="color:var(--phosphor-dim); margin-left:8px;">${stages[cs.stage].desc}</span>
+    </p>
+
+    <div class="controls" id="cs-controls">
+      <button class="btn amber" id="btn-transfer" ${cs.stage !== 1 ? 'disabled' : ''}>Transfer Data</button>
+      <button class="btn danger" id="btn-terminate" ${cs.stage !== 2 ? 'disabled' : ''}>End Connection</button>
+      <button class="btn" id="btn-reset-cs" style="margin-left:auto;">Reset</button>
+    </div>
+
+    <div class="console" id="console-cs">
+      <div class="line info">circuit-switch v1.0 ready. select first node to begin.</div>
+    </div>
+
+    <div class="teaching">
+      <div class="head">TEACHING POINT</div>
+      Once the path is reserved, <strong style="color:var(--amber-glow)">no other user can use it</strong> until the connection ends. This guarantees quality but wastes capacity during pauses or silence.
+    </div>
+  `;
+
+  $$('#circuit-row .node').forEach(node => {
+    node.addEventListener('click', () => handleNodeClick(node));
+  });
+  $('#btn-transfer').addEventListener('click', startTransfer);
+  $('#btn-terminate').addEventListener('click', terminate);
+  $('#btn-reset-cs').addEventListener('click', resetCS);
+
+  redrawCircuit();
+}
+
+function logCS(msg, cls='') {
+  const c = $('#console-cs');
+  if (!c) return;
+  const div = document.createElement('div');
+  div.className = 'line ' + cls;
+  div.textContent = msg;
+  c.appendChild(div);
+  c.scrollTop = c.scrollHeight;
+}
+
+function handleNodeClick(node) {
+  const cs = state.cs;
+  if (cs.stage !== 0) {
+    logCS('cannot modify path during stage ' + (cs.stage+1), 'warn');
+    return;
+  }
+  const id = node.dataset.id;
+  const expected = cs.requiredPath[cs.selectedPath.length];
+  if (id === expected) {
+    cs.selectedPath.push(id);
+    logCS(`node [${id}] reserved — hop ${cs.selectedPath.length}/${cs.requiredPath.length}`, 'ok');
+    redrawCircuit();
+    if (cs.selectedPath.length === cs.requiredPath.length) {
+      cs.stage = 1;
+      logCS('full path established. channel locked.', 'ok');
+      showToast('CHANNEL LOCKED', 'ok');
+      renderMode1($('#scene'));
+    }
+  } else {
+    cs.selectedPath = [];
+    logCS(`wrong order. expected [${expected}], got [${id}]. path cleared.`, 'err');
+    showToast('SEQUENCE ERROR — RESTART', 'err');
+    redrawCircuit();
+  }
+}
+
+function redrawCircuit() {
+  const cs = state.cs;
+  $$('#circuit-row .node').forEach(n => {
+    const id = n.dataset.id;
+    n.classList.toggle('in-path', cs.selectedPath.includes(id));
+    n.classList.toggle('selected', cs.selectedPath[cs.selectedPath.length-1] === id && cs.stage === 0);
+  });
+  $$('#circuit-row .cable').forEach((cable, i) => {
+    const active = cs.selectedPath.length > i+1;
+    cable.classList.toggle('active', active);
+    cable.classList.toggle('transmitting', active && cs.transmitting);
+  });
+}
+
+function startTransfer() {
+  const cs = state.cs;
+  if (cs.stage !== 1) return;
+  cs.transmitting = true;
+  redrawCircuit();
+  logCS('transmitting payload across reserved circuit...', 'info');
+  showToast('SIGNAL FLOWING', 'ok');
+  setTimeout(() => {
+    cs.transmitting = false;
+    cs.stage = 2;
+    logCS('payload delivered. channel still reserved (idle).', 'warn');
+    logCS('waste alert: nobody else can use this path right now.', 'warn');
+    showToast('DATA DELIVERED', 'ok');
+    renderMode1($('#scene'));
+  }, 3500);
+}
+
+function terminate() {
+  const cs = state.cs;
+  if (cs.stage !== 2) return;
+  logCS('connection terminated. channel released to network.', 'ok');
+  showToast('CIRCUIT FREED', 'ok');
+  // Reset for re-running
+  setTimeout(() => {
+    state.cs = { stage: 0, selectedPath: [], requiredPath: ['sender','switch1','switch2','receiver'], transmitting: false };
+    renderMode1($('#scene'));
+  }, 1200);
+}
+
+function resetCS() {
+  state.cs = { stage: 0, selectedPath: [], requiredPath: ['sender','switch1','switch2','receiver'], transmitting: false };
+  renderMode1($('#scene'));
+}
+
+// ====================== MODE 2: FDM ======================
+function renderMode2(scene) {
+  const fdm = state.fdm;
+  scene.innerHTML = `
+    <div class="scene-header">
+      <h2>FDM // Frequency Division</h2>
+      <div class="stage-tag">PROTOCOL: ANALOG MULTIPLEX</div>
+    </div>
+    <p class="brief"><strong>Concept:</strong> One physical cable. Drag each user onto a unique frequency lane. All users transmit <strong>simultaneously</strong>, but each on a different frequency band so signals don't collide.</p>
+
+    <div class="users-pool">
+      <h3>UNASSIGNED USERS — DRAG INTO A LANE</h3>
+      <div class="users-list" id="users-pool"></div>
+    </div>
+
+    <div class="fdm-cable">
+      <div class="fdm-cable-label">
+        <span>// SHARED COAXIAL CABLE — BANDWIDTH 0.3kHz to 4kHz</span>
+        <span id="fdm-status">${Object.values(fdm.assignments).filter(Boolean).length}/3 LANES OCCUPIED</span>
+      </div>
+      <div class="lanes" id="lanes">
+        ${[0,1,2,3].map(i => `
+          <div class="lane" data-freq="${i}">
+            <div class="lane-freq">F${i+1}</div>
+            <div class="lane-wave">
+              <svg viewBox="0 0 200 30" preserveAspectRatio="none">
+                <path d="${makeWave(i)}"/>
+              </svg>
+            </div>
+            <div class="lane-slot"><span class="placeholder">DROP HERE</span></div>
+          </div>
+        `).join('')}
+      </div>
+    </div>
+
+    <div class="controls">
+      <button class="btn" id="btn-fdm-reset" style="margin-left:auto;">Reset</button>
+    </div>
+
+    <div class="teaching">
+      <div class="head">TEACHING POINT</div>
+      <strong style="color:var(--amber-glow)">FDM allows multiple signals at the same time</strong>, but each must use a separate frequency band. Two users cannot share the same frequency, or their signals interfere. Used in old analog phone systems and FM radio.
+    </div>
+  `;
+
+  renderUsersPool();
+  renderLanes();
+  attachFDMHandlers();
+}
+
+function makeWave(seed) {
+  const freq = 6 + seed * 4;
+  const amp = 12 - seed * 1.5;
+  let d = `M 0 15`;
+  for (let x=0; x<=200; x+=2) {
+    const y = 15 + Math.sin((x/200)*Math.PI*freq) * amp;
+    d += ` L ${x} ${y.toFixed(1)}`;
+  }
+  return d;
+}
+
+function renderUsersPool() {
+  const pool = $('#users-pool');
+  if (!pool) return;
+  const fdm = state.fdm;
+  const assigned = Object.values(fdm.assignments).filter(Boolean);
+  const unassigned = fdm.users.filter(u => !assigned.includes(u));
+  pool.innerHTML = unassigned.map(u => `
+    <div class="user-chip" draggable="true" data-user="${u}">
+      <span class="pulse"></span>USER ${u}
+    </div>
+  `).join('') || '<span style="color:var(--phosphor-dim); font-family:VT323; font-size:14px;">// all users placed — transmitting simultaneously</span>';
+
+  pool.querySelectorAll('.user-chip').forEach(chip => {
+    chip.addEventListener('dragstart', e => {
+      e.dataTransfer.setData('user', chip.dataset.user);
+      e.dataTransfer.setData('source', 'pool');
+      chip.classList.add('dragging');
+    });
+    chip.addEventListener('dragend', () => chip.classList.remove('dragging'));
+  });
+}
+
+function renderLanes() {
+  const fdm = state.fdm;
+  $$('#lanes .lane').forEach(lane => {
+    const freq = parseInt(lane.dataset.freq);
+    const user = fdm.assignments[freq];
+    const slot = lane.querySelector('.lane-slot');
+    lane.classList.toggle('occupied', !!user);
+    if (user) {
+      slot.innerHTML = `<div class="user-chip" draggable="true" data-user="${user}" data-source-freq="${freq}"><span class="pulse"></span>USER ${user} ✓</div>`;
+      const chip = slot.querySelector('.user-chip');
+      chip.addEventListener('dragstart', e => {
+        e.dataTransfer.setData('user', user);
+        e.dataTransfer.setData('source', 'lane');
+        e.dataTransfer.setData('sourceFreq', freq);
+        chip.classList.add('dragging');
+      });
+      chip.addEventListener('dragend', () => chip.classList.remove('dragging'));
+    } else {
+      slot.innerHTML = `<span class="placeholder">DROP HERE</span>`;
+    }
+  });
+  const status = $('#fdm-status');
+  if (status) status.textContent = `${Object.values(fdm.assignments).filter(Boolean).length}/3 LANES OCCUPIED`;
+}
+
+function attachFDMHandlers() {
+  $$('#lanes .lane').forEach(lane => {
+    lane.addEventListener('dragover', e => {
+      e.preventDefault();
+      lane.classList.add('drag-over');
+    });
+    lane.addEventListener('dragleave', () => lane.classList.remove('drag-over'));
+    lane.addEventListener('drop', e => {
+      e.preventDefault();
+      lane.classList.remove('drag-over');
+      const user = e.dataTransfer.getData('user');
+      const source = e.dataTransfer.getData('source');
+      const sourceFreq = e.dataTransfer.getData('sourceFreq');
+      const freq = parseInt(lane.dataset.freq);
+      const fdm = state.fdm;
+
+      if (fdm.assignments[freq] && fdm.assignments[freq] !== user) {
+        showToast('FREQUENCY OCCUPIED — COLLISION', 'err');
+        return;
+      }
+      if (source === 'lane' && sourceFreq !== '') {
+        fdm.assignments[parseInt(sourceFreq)] = null;
+      }
+      fdm.assignments[freq] = user;
+      showToast(`USER ${user} → F${freq+1}`, 'ok');
+      renderUsersPool();
+      renderLanes();
+    });
+  });
+
+  $('#btn-fdm-reset').addEventListener('click', () => {
+    state.fdm.assignments = { 0: null, 1: null, 2: null, 3: null };
+    renderMode2($('#scene'));
+  });
+}
+
+// ====================== MODE 3: TDM ======================
+function renderMode3(scene) {
+  const tdm = state.tdm;
+  scene.innerHTML = `
+    <div class="scene-header">
+      <h2>TDM // Time Division</h2>
+      <div class="stage-tag">PROTOCOL: DIGITAL TIME-SHARE</div>
+    </div>
+    <p class="brief"><strong>Concept:</strong> One channel. One frequency. But split across <strong>8 time slots</strong> per frame. Drag users into any slots and run the frame to see how the channel behaves. Try different patterns — round-robin, statistical, or unfair — and observe what each produces. Click a filled slot to clear it.</p>
+
+    <div class="users-pool">
+      <h3>USERS — REUSABLE ACROSS SLOTS</h3>
+      <div class="users-list" id="users-pool-tdm"></div>
+    </div>
+
+    <div class="tdm-channel">
+      <div class="tdm-cable-label">
+        <span>// SHARED CHANNEL — FRAME = 8 TIME SLOTS</span>
+        <span id="tdm-status">${tdm.slots.filter(Boolean).length}/8 SLOTS FILLED</span>
+      </div>
+      <div class="tdm-frame">
+        <div class="tdm-slots">
+          <div class="tdm-axis">CH-01</div>
+          ${tdm.slots.map((u, i) => `
+            <div class="tdm-slot ${u ? 'filled' : ''}" data-slot="${i}" ${u ? `data-user="${u}"` : ''}>
+              <div class="slot-num">T${i+1}</div>
+              <div class="slot-user">${u ? 'USER ' + u : '— empty —'}</div>
+            </div>
+          `).join('')}
+        </div>
+        <div class="tdm-pointer" id="tdm-pointer" style="display:none;"></div>
+      </div>
+      <div class="tdm-axis-label">
+        <span></span>
+        <div class="scale">
+          <span>t=0</span>
+          <span>t=Δ</span>
+          <span>t=2Δ</span>
+          <span>t=3Δ</span>
+          <span>t=4Δ</span>
+          <span>t=5Δ</span>
+          <span>t=6Δ</span>
+          <span>t=7Δ</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="controls">
+      <button class="btn amber" id="btn-tdm-run">Run Frame</button>
+      <button class="btn" id="btn-preset-rr">Preset: Round-Robin</button>
+      <button class="btn" id="btn-preset-stat">Preset: Statistical</button>
+      <button class="btn" id="btn-preset-unfair">Preset: Unfair</button>
+      <button class="btn" id="btn-tdm-reset" style="margin-left:auto;">Reset</button>
+    </div>
+
+    <div id="tdm-analysis" style="display:none; margin-bottom:16px; padding:14px; border:1px solid var(--border); background:rgba(0,0,0,0.4); font-family:'VT323', monospace; font-size:15px; line-height:1.6;"></div>
+
+    <div class="teaching">
+      <div class="head">TEACHING POINT</div>
+      <strong style="color:var(--amber-glow)">TDM shares one channel by giving each user different time periods.</strong> The pattern matters: <em>round-robin</em> (A→B→C→A→B→C) is fair and predictable but wastes empty slots. <em>Statistical TDM</em> assigns slots only when a user has data — more efficient but needs headers to identify the sender. An <em>unfair</em> pattern (A,A,A,B...) lets one user hog the channel. Run different patterns to see them in action.
+    </div>
+  `;
+
+  renderTDMPool();
+  attachTDMHandlers();
+}
+
+function renderTDMPool() {
+  const pool = $('#users-pool-tdm');
+  if (!pool) return;
+  const tdm = state.tdm;
+  pool.innerHTML = tdm.users.map(u => `
+    <div class="user-chip" draggable="true" data-user="${u}">
+      <span class="pulse"></span>USER ${u}
+    </div>
+  `).join('');
+  pool.querySelectorAll('.user-chip').forEach(chip => {
+    chip.addEventListener('dragstart', e => {
+      e.dataTransfer.setData('user', chip.dataset.user);
+      chip.classList.add('dragging');
+    });
+    chip.addEventListener('dragend', () => chip.classList.remove('dragging'));
+  });
+}
+
+function attachTDMHandlers() {
+  $$('.tdm-slot').forEach(slot => {
+    slot.addEventListener('dragover', e => { e.preventDefault(); slot.classList.add('drag-over'); });
+    slot.addEventListener('dragleave', () => slot.classList.remove('drag-over'));
+    slot.addEventListener('drop', e => {
+      e.preventDefault();
+      slot.classList.remove('drag-over');
+      const user = e.dataTransfer.getData('user');
+      const idx = parseInt(slot.dataset.slot);
+      state.tdm.slots[idx] = user;
+      showToast(`USER ${user} → T${idx+1}`, 'ok');
+      renderMode3($('#scene'));
+    });
+    slot.addEventListener('click', () => {
+      const idx = parseInt(slot.dataset.slot);
+      if (state.tdm.slots[idx]) {
+        state.tdm.slots[idx] = null;
+        renderMode3($('#scene'));
+      }
+    });
+  });
+
+  $('#btn-tdm-run').addEventListener('click', () => {
+    const tdm = state.tdm;
+    const filled = tdm.slots.filter(Boolean).length;
+    if (filled === 0) {
+      showToast('PLACE AT LEAST ONE USER', 'err');
+      return;
+    }
+    runTDMAnimation();
+  });
+
+  $('#btn-preset-rr').addEventListener('click', () => {
+    state.tdm.slots = ['A','B','C','A','B','C','A','B'];
+    renderMode3($('#scene'));
+    showToast('PRESET LOADED — ROUND-ROBIN', 'ok');
+  });
+
+  $('#btn-preset-stat').addEventListener('click', () => {
+    // Statistical: irregular but data-driven, some empty slots
+    state.tdm.slots = ['A','A','B','A',null,'C','A','B'];
+    renderMode3($('#scene'));
+    showToast('PRESET LOADED — STATISTICAL', 'ok');
+  });
+
+  $('#btn-preset-unfair').addEventListener('click', () => {
+    state.tdm.slots = ['A','A','A','A','A','B','A','C'];
+    renderMode3($('#scene'));
+    showToast('PRESET LOADED — UNFAIR', 'ok');
+  });
+
+  $('#btn-tdm-reset').addEventListener('click', () => {
+    state.tdm.slots = [null,null,null,null,null,null,null,null];
+    renderMode3($('#scene'));
+  });
+}
+
+function analyzePattern(slots) {
+  const filled = slots.filter(Boolean);
+  const empty = slots.filter(x => x === null).length;
+  const counts = {};
+  filled.forEach(u => counts[u] = (counts[u] || 0) + 1);
+  const users = Object.keys(counts);
+
+  // Check round-robin
+  const rotations = [
+    ['A','B','C','A','B','C','A','B'],
+    ['B','C','A','B','C','A','B','C'],
+    ['C','A','B','C','A','B','C','A'],
+    ['A','B','A','B','A','B','A','B'],
+    ['A','C','A','C','A','C','A','C'],
+    ['B','C','B','C','B','C','B','C'],
+  ];
+  const isRR = rotations.some(r => r.every((u,i) => u === slots[i]));
+
+  // Check fairness (max difference in counts)
+  const vals = Object.values(counts);
+  const maxC = Math.max(...vals, 0);
+  const minC = vals.length > 0 ? Math.min(...vals) : 0;
+  const isUnfair = users.length > 1 && (maxC - minC) >= 3;
+
+  if (isRR) {
+    return {
+      type: 'ROUND-ROBIN',
+      color: 'var(--phosphor-glow)',
+      msg: `Each user gets a fixed, repeating slot. Predictable, fair, simple to implement — but every empty slot is wasted bandwidth. This is <strong style="color:var(--amber)">Synchronous TDM</strong>, used in T1/E1 lines and GSM.`
+    };
+  }
+  if (empty > 0 && !isUnfair) {
+    return {
+      type: 'STATISTICAL TDM',
+      color: 'var(--cyan)',
+      msg: `No fixed pattern. Slots are filled only when users actually have data. More efficient (less waste) but each slot needs a header tag to say which user owns it. This is <strong style="color:var(--amber)">Asynchronous / Statistical TDM</strong>, used in modern packet networks.`
+    };
+  }
+  if (isUnfair) {
+    const hog = Object.entries(counts).sort((a,b) => b[1]-a[1])[0];
+    return {
+      type: 'UNFAIR ALLOCATION',
+      color: 'var(--red)',
+      msg: `User ${hog[0]} occupies ${hog[1]}/8 slots while others get less. The channel works, but one user is hogging bandwidth. This is technically valid TDM, but violates fairness. Real systems use scheduling rules to prevent this.`
+    };
+  }
+  return {
+    type: 'CUSTOM PATTERN',
+    color: 'var(--amber)',
+    msg: `A non-standard pattern. The channel still functions — TDM doesn't enforce round-robin — but without a clear rule, receivers need extra information (slot headers) to know who is transmitting in each slot.`
+  };
+}
+
+function runTDMAnimation() {
+  const tdm = state.tdm;
+  const pointer = $('#tdm-pointer');
+  const analysisBox = $('#tdm-analysis');
+  pointer.style.display = 'block';
+  analysisBox.style.display = 'none';
+  let i = 0;
+  const slots = $$('.tdm-slot');
+  const slotWidths = slots[0] ? slots[0].getBoundingClientRect().width + 4 : 80;
+
+  if (tdm.playInterval) clearInterval(tdm.playInterval);
+
+  tdm.playInterval = setInterval(() => {
+    slots.forEach(s => s.classList.remove('playing'));
+    if (i >= 8) {
+      clearInterval(tdm.playInterval);
+      pointer.style.display = 'none';
+
+      // Show pattern analysis
+      const analysis = analyzePattern(tdm.slots);
+      const empty = tdm.slots.filter(x => x === null).length;
+      analysisBox.innerHTML = `
+        <div style="font-family:'Major Mono Display', monospace; font-size:16px; color:${analysis.color}; margin-bottom:8px; letter-spacing:-0.01em;">
+          ◈ PATTERN DETECTED: ${analysis.type}
+        </div>
+        <div style="color:var(--phosphor); margin-bottom:8px;">${analysis.msg}</div>
+        <div style="color:var(--phosphor-dim); font-size:13px; border-top:1px dotted var(--phosphor-dim); padding-top:6px;">
+          UTILIZATION: ${8-empty}/8 slots used &nbsp; // &nbsp; ${empty} empty (wasted)
+        </div>
+      `;
+      analysisBox.style.display = 'block';
+      showToast('FRAME COMPLETE — SEE ANALYSIS', 'ok');
+      return;
+    }
+    if (tdm.slots[i]) {
+      slots[i].classList.add('playing');
+    }
+    pointer.style.left = (60 + (i + 0.5) * slotWidths - 6) + 'px';
+    i++;
+  }, 500);
+}
+
+// ====================== INIT ======================
+$$('#tabs .tab').forEach(tab => {
+  tab.addEventListener('click', () => setMode(parseInt(tab.dataset.mode)));
+});
+
+updateModeDisp();
+updateTabs();
+startTimer();
+renderScene();
+</script>
+</body>
+</html>

@@ -1,0 +1,516 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>DDoS Demo — Send a Request!</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Sora:wght@400;600;700;800&display=swap');
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  :root {
+    --green: #00ff88; --red: #ff3355; --yellow: #ffd700; --blue: #00aaff;
+    --darker: #060810; --panel: #111827; --border: rgba(255,255,255,0.08);
+    --text: #e8eaf6; --muted: #6b7280;
+    --font-main: 'Sora', sans-serif; --font-mono: 'Space Mono', monospace;
+  }
+  body {
+    background: radial-gradient(ellipse at 50% 0%, #0e1629 0%, #060810 70%);
+    color: var(--text); font-family: var(--font-main);
+    min-height: 100vh; display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+    padding: 2rem 1.5rem; gap: 1.75rem;
+  }
+
+  /* connecting overlay */
+  #connecting {
+    position: fixed; inset: 0; background: rgba(6,8,16,0.93);
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    gap: 1rem; z-index: 999; font-family: var(--font-mono);
+  }
+  .spin {
+    width: 40px; height: 40px;
+    border: 3px solid rgba(255,255,255,0.1);
+    border-top-color: var(--blue); border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  #connecting p { color: var(--muted); font-size: 0.82rem; }
+  #conn-err { color: var(--red); font-size: 0.76rem; max-width: 340px; text-align: center; line-height: 1.7; display: none; }
+
+  /* name entry */
+  #name-screen {
+    position: fixed; inset: 0; background: rgba(6,8,16,0.96);
+    display: none; flex-direction: column; align-items: center; justify-content: center;
+    gap: 1.25rem; z-index: 998; font-family: var(--font-mono); padding: 2rem;
+  }
+  #name-screen h2 { font-family: var(--font-main); font-size: 1.4rem; font-weight: 800; letter-spacing: -0.02em; }
+  #name-screen h2 span { color: var(--blue); }
+  #name-screen p { color: var(--muted); font-size: 0.8rem; text-align: center; }
+  #name-input {
+    background: var(--panel); border: 1px solid var(--border); border-radius: 10px;
+    color: var(--text); padding: 0.75rem 1.25rem; font-family: var(--font-mono);
+    font-size: 1rem; width: 100%; max-width: 300px; outline: none;
+    transition: border-color 0.2s;
+  }
+  #name-input:focus { border-color: var(--blue); }
+  #name-btn {
+    background: var(--blue); color: #000; border: none; border-radius: 10px;
+    padding: 0.75rem 2rem; font-family: var(--font-main); font-size: 1rem;
+    font-weight: 700; cursor: pointer; transition: all 0.15s; width: 100%; max-width: 300px;
+  }
+  #name-btn:hover { background: #33bbff; transform: translateY(-2px); }
+
+  .header { text-align: center; }
+  .header h1 { font-size: clamp(1.4rem,5vw,2rem); font-weight: 800; letter-spacing: -0.03em; line-height: 1.2; }
+  .header h1 span { color: var(--blue); }
+  .header p { color: var(--muted); font-size: 0.82rem; font-family: var(--font-mono); margin-top: 0.4rem; }
+  .header .player-name { color: var(--yellow); font-size: 0.78rem; font-family: var(--font-mono); margin-top: 0.25rem; }
+
+  /* duck scene */
+  .duck-scene { position: relative; display: flex; flex-direction: column; align-items: center; gap: 1.25rem; }
+
+  .bubble {
+    position: absolute; top: -70px; left: 50%; transform: translateX(-50%);
+    background: var(--panel); border: 1px solid var(--border); border-radius: 12px;
+    padding: 0.5rem 1rem; font-size: 0.78rem; font-family: var(--font-mono);
+    white-space: nowrap; pointer-events: none; z-index: 10;
+    opacity: 0; transition: opacity 0.25s;
+  }
+  .bubble::after {
+    content: ''; position: absolute; bottom: -8px; left: 50%;
+    transform: translateX(-50%); border: 8px solid transparent;
+    border-top-color: var(--panel);
+  }
+  .bubble.show { opacity: 1; }
+  .bubble.ok   { color: var(--green);  border-color: rgba(0,255,136,0.35); }
+  .bubble.warn { color: var(--yellow); border-color: rgba(255,215,0,0.35); }
+  .bubble.err  { color: var(--red);    border-color: rgba(255,51,85,0.45); }
+
+  .duck-wrap {
+    position: relative; cursor: pointer; user-select: none;
+    transition: transform 0.1s;
+    filter: drop-shadow(0 0 24px rgba(0,170,255,0.2));
+  }
+  .duck-wrap:active:not(.dead) { transform: scale(0.93); }
+  .duck-wrap.dead { cursor: not-allowed; filter: drop-shadow(0 0 24px rgba(255,51,85,0.35)); }
+  @keyframes shake {
+    0%,100%{ transform:translateX(0); }
+    20%    { transform:translateX(-9px) rotate(-5deg); }
+    40%    { transform:translateX(9px) rotate(5deg); }
+    60%    { transform:translateX(-6px) rotate(-3deg); }
+    80%    { transform:translateX(6px) rotate(3deg); }
+  }
+  .duck-wrap.shaking { animation: shake 0.4s ease; }
+
+  .env-layer { position: absolute; top: 10px; left: 50%; pointer-events: none; z-index: 20; }
+  .envelope  {
+    position: absolute; font-size: 1.3rem;
+    transform: translate(-50%, 0);
+    animation: flyup 1s ease-out forwards;
+  }
+  @keyframes flyup {
+    0%   { opacity:1; transform:translate(calc(-50% + var(--dx)), 0) scale(1); }
+    80%  { opacity:0.7; transform:translate(calc(-50% + var(--dx)), -85px) scale(0.65); }
+    100% { opacity:0;   transform:translate(calc(-50% + var(--dx)), -110px) scale(0.3); }
+  }
+
+  .send-btn {
+    padding: 0.9rem 2.8rem; font-size: 1rem; font-weight: 700;
+    font-family: var(--font-main); background: var(--blue); color: #000;
+    border: none; border-radius: 10px; cursor: pointer;
+    transition: all 0.15s; letter-spacing: 0.01em;
+    display: flex; align-items: center; gap: 0.5rem;
+  }
+  .send-btn:hover:not(:disabled) { background: #33bbff; transform: translateY(-3px); box-shadow: 0 8px 24px rgba(0,170,255,0.4); }
+  .send-btn:active:not(:disabled) { transform: scale(0.97); }
+  .send-btn:disabled { background: #1a2030; color: var(--muted); cursor: not-allowed; box-shadow: none; }
+
+  .my-stats { display: flex; gap: 0.9rem; flex-wrap: wrap; justify-content: center; }
+  .my-stat { background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 0.7rem 1.3rem; text-align: center; min-width: 100px; }
+  .my-stat-label { font-size: 0.62rem; font-family: var(--font-mono); color: var(--muted); text-transform: uppercase; letter-spacing: 0.12em; margin-bottom: 0.3rem; }
+  .my-stat-val { font-size: 1.7rem; font-weight: 800; font-family: var(--font-mono); transition: color 0.3s; }
+
+  .info-box {
+    background: var(--panel); border: 1px solid var(--border); border-radius: 10px;
+    padding: 1rem 1.3rem; max-width: 380px; width: 100%;
+    font-family: var(--font-mono); font-size: 0.74rem; color: var(--muted); line-height: 1.8;
+  }
+  .info-box-title { color: var(--blue); font-weight: 700; margin-bottom: 0.3rem; }
+  .hi  { color: var(--yellow); }
+  .bad { color: var(--red); }
+
+  #toast {
+    position: fixed; bottom: 1.5rem; left: 50%;
+    transform: translateX(-50%) translateY(90px);
+    background: var(--panel); border: 1px solid var(--border); border-radius: 10px;
+    padding: 0.65rem 1.4rem; font-family: var(--font-mono); font-size: 0.8rem;
+    transition: transform 0.3s cubic-bezier(.34,1.56,.64,1);
+    z-index: 999; white-space: nowrap; pointer-events: none;
+  }
+  #toast.show  { transform: translateX(-50%) translateY(0); }
+  #toast.ok    { border-color: rgba(0,255,136,0.4); color: var(--green); }
+  #toast.warn  { border-color: rgba(255,215,0,0.4);  color: var(--yellow); }
+  #toast.err   { border-color: rgba(255,51,85,0.4);  color: var(--red); }
+</style>
+</head>
+<body>
+
+<!-- connecting overlay -->
+<div id="connecting">
+  <div class="spin"></div>
+  <p>Connecting to server...</p>
+  <p id="conn-err"></p>
+</div>
+
+<!-- name entry screen -->
+<div id="name-screen">
+  <h2>👋 Enter your <span>name</span></h2>
+  <p>Your name will appear on the teacher's dashboard</p>
+  <input id="name-input" type="text" maxlength="20" placeholder="e.g. Ali, Siti, Kumar..." autocomplete="off"/>
+  <button id="name-btn" onclick="submitName()">Join Simulation →</button>
+</div>
+
+<div class="header">
+  <h1>📡 Send Request to <span>Server</span></h1>
+  <p>// click the duck to send an HTTP request</p>
+  <p class="player-name" id="player-label"></p>
+</div>
+
+<div class="duck-scene">
+  <div class="bubble" id="bubble">...</div>
+
+  <div class="duck-wrap" id="duck-wrap" onclick="sendRequest()">
+    <div class="env-layer" id="env-layer"></div>
+
+    <!-- ALIVE -->
+    <svg id="duck-alive" width="190" height="190" viewBox="0 0 120 120">
+      <ellipse cx="60" cy="85" rx="42" ry="30" fill="#FFD700"/>
+      <ellipse cx="76" cy="90" rx="20" ry="11" fill="#FFC107" opacity="0.7"/>
+      <circle cx="52" cy="50" r="25" fill="#FFD700"/>
+      <ellipse cx="32" cy="53" rx="14" ry="8" fill="#FF8C00"/>
+      <circle cx="44" cy="43" r="5" fill="#1a1a2e"/>
+      <circle cx="45.5" cy="41" r="2" fill="white"/>
+      <path d="M38 54 Q42 57 46 54" stroke="#FF8C00" stroke-width="1.5" fill="none" stroke-linecap="round"/>
+      <path id="duck-wing" d="M68 80 Q85 70 90 82 Q80 88 68 80" fill="#FFC107"/>
+      <ellipse cx="50" cy="113" rx="8" ry="4" fill="#FF8C00"/>
+      <ellipse cx="70" cy="113" rx="8" ry="4" fill="#FF8C00"/>
+    </svg>
+
+    <!-- DEAD -->
+    <svg id="duck-dead" width="190" height="190" viewBox="0 0 120 120" style="display:none">
+      <g transform="rotate(-38 60 88)">
+        <ellipse cx="60" cy="92" rx="42" ry="26" fill="#9ca3af"/>
+        <ellipse cx="76" cy="97" rx="20" ry="10" fill="#6b7280" opacity="0.7"/>
+        <circle cx="52" cy="58" r="25" fill="#9ca3af"/>
+        <ellipse cx="32" cy="61" rx="14" ry="8" fill="#6b7280"/>
+        <line x1="40" y1="49" x2="48" y2="57" stroke="#1a1a2e" stroke-width="2.5" stroke-linecap="round"/>
+        <line x1="48" y1="49" x2="40" y2="57" stroke="#1a1a2e" stroke-width="2.5" stroke-linecap="round"/>
+        <path d="M38 65 Q42 61 46 65" stroke="#6b7280" stroke-width="1.5" fill="none" stroke-linecap="round"/>
+        <ellipse cx="50" cy="34" rx="7" ry="3" fill="#6b7280" transform="rotate(-20 50 34)"/>
+        <ellipse cx="66" cy="28" rx="7" ry="3" fill="#6b7280" transform="rotate(-30 66 28)"/>
+      </g>
+      <text x="84" y="42" font-size="20" font-family="serif">💥</text>
+      <text x="8"  y="56" font-size="15" font-family="serif">😵</text>
+    </svg>
+  </div>
+
+  <button class="send-btn" id="send-btn" onclick="sendRequest()">📨 Send Request</button>
+</div>
+
+<div class="my-stats">
+  <div class="my-stat">
+    <div class="my-stat-label">My Requests</div>
+    <div class="my-stat-val" id="s-count"  style="color:var(--blue)">0</div>
+  </div>
+  <div class="my-stat">
+    <div class="my-stat-label">Status</div>
+    <div class="my-stat-val" id="s-status" style="color:var(--green);font-size:0.95rem;padding-top:0.3rem">OK ✓</div>
+  </div>
+  <div class="my-stat">
+    <div class="my-stat-label">Limit</div>
+    <div class="my-stat-val" style="color:var(--muted)">20</div>
+  </div>
+</div>
+
+<div class="info-box">
+  <div class="info-box-title">// What is a DDoS attack?</div>
+  Each click = one <span class="hi">HTTP request</span> to the server.<br>
+  When <span class="hi">many students</span> click at the same time,<br>
+  the server gets <span class="bad">overwhelmed</span> and crashes —<br>
+  that's a <span class="bad">Distributed Denial of Service</span> attack!
+</div>
+
+<div id="toast"></div>
+
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
+<script>
+// ╔══════════════════════════════════════════════════════╗
+// ║  STEP 1: PASTE YOUR FIREBASE CONFIG HERE             ║
+// ║  Must be the same config as in teacher.html          ║
+// ╚══════════════════════════════════════════════════════╝
+const firebaseConfig = {
+  apiKey: "AIzaSyAjlPEZC2AWVLuXXZXXQMyVB0YQThlSbn4",
+  authDomain: "ddos-demo-f0ca9.firebaseapp.com",
+  databaseURL: "https://ddos-demo-f0ca9-default-rtdb.asia-southeast1.firebasedatabase.app",
+  projectId: "ddos-demo-f0ca9",
+  storageBucket: "ddos-demo-f0ca9.firebasestorage.app",
+  messagingSenderId: "898477434766",
+  appId: "1:898477434766:web:e87926ba2136f77e89a6df"
+};
+// ══════════════════════════════════════════════════════
+
+const LIMIT       = 20;
+const OVERLOAD_AT = 50;
+
+let db, globalRef, myStudentRef, feedRef;
+let myCount  = 0;
+let isDead   = false;
+let studentId = null;
+let studentName = '';
+let bubbleTimer = null;
+let toastTimer  = null;
+let wingTimer   = null;
+
+// generate a stable ID for this browser session
+function getStudentId() {
+  let id = sessionStorage.getItem('ddos_student_id');
+  if (!id) { id = 'stu_' + Math.random().toString(36).slice(2,10); sessionStorage.setItem('ddos_student_id', id); }
+  return id;
+}
+
+try {
+  firebase.initializeApp(firebaseConfig);
+  db = firebase.database();
+} catch(e) {
+  document.getElementById('conn-err').style.display = 'block';
+  document.getElementById('conn-err').textContent = 'Config error: ' + e.message;
+}
+
+if (db) {
+  globalRef = db.ref('ddos/global');
+  feedRef   = db.ref('ddos/feed');
+  studentId = getStudentId();
+  myStudentRef = db.ref('ddos/students/' + studentId);
+
+  // connection
+  db.ref('.info/connected').on('value', snap => {
+    if (snap.val()) {
+      document.getElementById('connecting').style.display = 'none';
+      // show name screen if no name yet
+      if (!studentName) {
+        document.getElementById('name-screen').style.display = 'flex';
+        setTimeout(() => document.getElementById('name-input').focus(), 100);
+      }
+    } else {
+      document.getElementById('connecting').style.display = 'flex';
+    }
+  });
+
+  // listen for teacher reset
+  db.ref('ddos/global/resetAt').on('value', snap => {
+    const newReset = snap.val();
+    if (!newReset) return;
+    const lastReset = sessionStorage.getItem('ddos_last_reset');
+    if (lastReset && newReset !== parseInt(lastReset)) {
+      sessionStorage.setItem('ddos_last_reset', newReset);
+      reviveDuck();
+    } else if (!lastReset) {
+      sessionStorage.setItem('ddos_last_reset', newReset);
+    }
+  });
+}
+
+// name entry
+document.getElementById('name-input').addEventListener('keydown', e => {
+  if (e.key === 'Enter') submitName();
+});
+
+function submitName() {
+  const val = document.getElementById('name-input').value.trim();
+  if (!val) { document.getElementById('name-input').style.borderColor = 'var(--red)'; return; }
+  studentName = val;
+  document.getElementById('name-screen').style.display = 'none';
+  document.getElementById('player-label').textContent = '👤 Playing as: ' + studentName;
+  // register student
+  myStudentRef.set({ name: studentName, count: 0, dead: false });
+  myStudentRef.onDisconnect().remove();
+}
+
+// ── SEND REQUEST ──
+function sendRequest() {
+  if (!studentName) {
+    document.getElementById('name-screen').style.display = 'flex';
+    return;
+  }
+  if (isDead) { showBubble("💀 I can't take any more!", 'err'); shake(); return; }
+  if (myCount >= LIMIT) { killDuck(); return; }
+
+  // 1. Update local counter immediately — this is what the student sees
+  myCount++;
+  updateMyUI();
+  launchEnvelope();
+  waveWing();
+
+  // 2. Read current global total, then increment it
+  globalRef.once('value', snap => {
+    const current  = snap.val() || { total: 0, rejected: 0, resetAt: Date.now() };
+    const newTotal = (current.total || 0) + 1;
+    let   newRejected = current.rejected || 0;
+
+    // Decide response type based on new total
+    let type, bubbleText, toastText, toastClass;
+    if (newTotal <= OVERLOAD_AT * 0.6) {
+      type = 'ok';
+      bubbleText = '📨 Sent! 200 OK ✓';
+      toastText  = '✓ Connection established! Server replied 200 OK';
+      toastClass = 'ok';
+    } else if (newTotal <= OVERLOAD_AT) {
+      type = 'warn';
+      bubbleText = '⚠️ Slow... 429 Too Many Requests';
+      toastText  = '⚠ Server slowing — 429 Too Many Requests';
+      toastClass = 'warn';
+    } else {
+      type = 'err';
+      newRejected++;
+      bubbleText = '💀 503 Service Unavailable!';
+      toastText  = '✗ Server OVERLOADED — 503 Service Unavailable';
+      toastClass = 'err';
+    }
+
+    // 3. Write updated global stats
+    globalRef.update({ total: newTotal, rejected: newRejected });
+
+    // 4. Update this student's record on the dashboard
+    myStudentRef.update({ name: studentName, count: myCount, dead: false });
+
+    // 5. Push to feed
+    const labels = { ok: 'GET / 200 OK', warn: 'GET / 429 Too Many', err: 'GET / 503 DROPPED' };
+    feedRef.push({ type, msg: `[${timestamp()}] ${labels[type]} — ${studentName} (req #${newTotal})` });
+
+    // 6. Show feedback to student
+    showBubble(bubbleText, type);
+    showToast(toastText, toastClass);
+  });
+
+  // 7. Kill duck after hitting personal limit
+  if (myCount >= LIMIT) {
+    setTimeout(() => killDuck(), 600);
+  }
+}
+
+function timestamp() {
+  const d = new Date();
+  return [d.getHours(), d.getMinutes(), d.getSeconds()].map(n => String(n).padStart(2,'0')).join(':');
+}
+
+// ── DUCK DEATH ──
+function killDuck() {
+  isDead = true;
+  document.getElementById('duck-alive').style.display = 'none';
+  document.getElementById('duck-dead').style.display  = 'block';
+  document.getElementById('duck-wrap').classList.add('dead');
+  document.getElementById('send-btn').disabled = true;
+  document.getElementById('s-status').textContent = 'DEAD 💀';
+  document.getElementById('s-status').style.color = 'var(--red)';
+  showBubble("💀 I'm dead! No more requests!", 'err');
+  showToast('Your duck crashed! This is what DDoS feels like!', 'err');
+  myStudentRef.update({ dead: true });
+  feedRef.push({ type:'err', msg:`[${timestamp()}] ⚠ ${studentName}'s duck CRASHED — overloaded!` });
+}
+
+function reviveDuck() {
+  myCount = 0; isDead = false;
+  document.getElementById('duck-alive').style.display = 'block';
+  document.getElementById('duck-dead').style.display  = 'none';
+  document.getElementById('duck-wrap').classList.remove('dead');
+  document.getElementById('send-btn').disabled = false;
+  document.getElementById('s-count').textContent  = '0';
+  document.getElementById('s-count').style.color  = 'var(--blue)';
+  document.getElementById('s-status').textContent = 'OK ✓';
+  document.getElementById('s-status').style.color = 'var(--green)';
+  if (studentName) myStudentRef.set({ name: studentName, count: 0, dead: false });
+  showToast('Teacher reset the simulation — duck is alive!', 'ok');
+  showBubble('🎉 Reset! Ready again!', 'ok');
+}
+
+// ── WING WAVE ──
+function waveWing() {
+  const wing = document.getElementById('duck-wing');
+  if (!wing) return;
+  const paths = [
+    'M68 80 Q85 70 90 82 Q80 88 68 80',
+    'M68 80 Q88 63 96 77 Q83 90 68 80',
+    'M68 80 Q85 70 90 82 Q80 88 68 80',
+  ];
+  let f = 0;
+  if (wingTimer) clearInterval(wingTimer);
+  wingTimer = setInterval(() => {
+    wing.setAttribute('d', paths[f % paths.length]);
+    f++;
+    if (f >= 6) { clearInterval(wingTimer); wing.setAttribute('d', paths[0]); }
+  }, 75);
+}
+
+// ── ENVELOPE ──
+function launchEnvelope() {
+  const layer = document.getElementById('env-layer');
+  const el = document.createElement('div');
+  el.className = 'envelope';
+  el.textContent = '✉️';
+  el.style.setProperty('--dx', ((Math.random()-.5)*90) + 'px');
+  layer.appendChild(el);
+  setTimeout(() => el.remove(), 1100);
+}
+
+// ── SHAKE ──
+function shake() {
+  const w = document.getElementById('duck-wrap');
+  w.classList.remove('shaking');
+  void w.offsetWidth;
+  w.classList.add('shaking');
+  setTimeout(() => w.classList.remove('shaking'), 450);
+}
+
+// ── MY STATS ──
+function updateMyUI() {
+  const ratio   = myCount / LIMIT;
+  const countEl = document.getElementById('s-count');
+  const statEl  = document.getElementById('s-status');
+
+  // Always update the number display
+  countEl.textContent = String(myCount);
+  countEl.style.color = ratio < 0.5 ? 'var(--blue)' : ratio < 0.85 ? 'var(--yellow)' : 'var(--red)';
+
+  if (!isDead) {
+    if (ratio < 0.5) {
+      statEl.textContent = 'OK ✓';
+      statEl.style.color = 'var(--green)';
+    } else if (ratio < 0.85) {
+      statEl.textContent = 'WARNING ⚠';
+      statEl.style.color = 'var(--yellow)';
+    } else {
+      statEl.textContent = 'CRITICAL ✗';
+      statEl.style.color = 'var(--red)';
+    }
+  }
+}
+
+// ── BUBBLE ──
+function showBubble(text, cls) {
+  const b = document.getElementById('bubble');
+  b.textContent = text; b.className = `bubble show ${cls}`;
+  if (bubbleTimer) clearTimeout(bubbleTimer);
+  bubbleTimer = setTimeout(() => b.classList.remove('show'), 2400);
+}
+
+// ── TOAST ──
+function showToast(text, cls) {
+  const t = document.getElementById('toast');
+  t.textContent = text; t.className = `show ${cls}`;
+  if (toastTimer) clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => t.classList.remove('show'), 2800);
+}
+</script>
+</body>
+</html>
